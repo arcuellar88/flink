@@ -23,9 +23,11 @@ import org.apache.flink.api.common.state.ListStateDescriptor;
 import org.apache.flink.api.common.state.ReducingStateDescriptor;
 import org.apache.flink.api.common.typeinfo.BasicTypeInfo;
 import org.apache.flink.api.common.typeinfo.TypeInformation;
+import org.apache.flink.api.common.typeutils.TypeSerializer;
 import org.apache.flink.api.java.functions.KeySelector;
 import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.api.java.tuple.Tuple3;
+import org.apache.flink.api.java.typeutils.TypeExtractor;
 import org.apache.flink.api.java.typeutils.TypeInfoParser;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.streaming.api.datastream.WindowedStream;
@@ -37,7 +39,9 @@ import org.apache.flink.streaming.api.functions.windowing.WindowFunction;
 import org.apache.flink.streaming.api.watermark.Watermark;
 import org.apache.flink.streaming.api.windowing.assigners.EventTimeSessionWindows;
 import org.apache.flink.streaming.api.windowing.assigners.GlobalWindows;
+import org.apache.flink.streaming.api.windowing.assigners.MultiQueryWindowAssigner;
 import org.apache.flink.streaming.api.windowing.assigners.SlidingEventTimeWindows;
+import org.apache.flink.streaming.api.windowing.assigners.SlidingEventTimeWindowsOutOfOrder;
 import org.apache.flink.streaming.api.windowing.assigners.TumblingEventTimeWindows;
 import org.apache.flink.streaming.api.windowing.evictors.CountEvictor;
 import org.apache.flink.streaming.api.windowing.time.Time;
@@ -58,6 +62,7 @@ import org.apache.flink.util.Collector;
 import org.junit.Assert;
 import org.junit.Test;
 
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
@@ -72,6 +77,76 @@ public class WindowOperatorTest {
 	// For counting if close() is called the correct number of times on the SumReducer
 	private static AtomicInteger closeCalled = new AtomicInteger(0);
 
+	@Test
+	public void testEagerHeapAggregator()
+	{
+		Tuple2<String,Integer> t = new Tuple2<String, Integer>("",0);
+		
+		TypeInformation<Tuple2<String,Integer>> inputType = TypeInfoParser.parse("Tuple2<String, Integer>");
+		TypeSerializer<Tuple2<String,Integer>> inputSerializer= inputType.createSerializer(new ExecutionConfig()) ; 
+		EagerHeapAggregator<Tuple2<String,Integer>> aggregator= new EagerHeapAggregator<Tuple2<String,Integer>>(new SumReducer(),inputSerializer, t, 8);
+		
+		try 
+		{
+			System.out.println("Capacity: "+aggregator.currentCapacity());
+
+			aggregator.add(0,new Tuple2<>("key2", 1));
+			aggregator.add(1,new Tuple2<>("key2", 1));
+			aggregator.add(2,new Tuple2<>("key2", 1));
+			aggregator.add(3,new Tuple2<>("key2", 1));
+			aggregator.add(4,new Tuple2<>("key2", 1));
+			aggregator.add(5,new Tuple2<>("key2", 1));
+			aggregator.add(6,new Tuple2<>("key2", 1));
+			aggregator.add(7,new Tuple2<>("key2", 1));
+			
+			System.out.println(aggregator.aggregate());
+			System.out.println(aggregator.aggregate(3));
+			System.out.println(aggregator.aggregate(3,7));
+			System.out.println("Capacity: "+aggregator.currentCapacity());
+
+			System.out.println();
+			aggregator.removeUpTo(3);
+			System.out.println(aggregator.aggregate());
+			System.out.println(aggregator.aggregate(3));
+			System.out.println(aggregator.aggregate(3,7));
+			System.out.println("Capacity: "+aggregator.currentCapacity());
+
+			System.out.println("new items");
+			aggregator.add(8,new Tuple2<>("key2", 1));
+			aggregator.add(9,new Tuple2<>("key2", 1));
+			aggregator.add(10,new Tuple2<>("key2", 1));
+
+			System.out.println(aggregator.aggregate());
+			System.out.println(aggregator.aggregate(3));
+			System.out.println(aggregator.aggregate(3,7));
+			//System.out.println(aggregator.aggregate(9,8));
+			System.out.println("Capacity: "+aggregator.currentCapacity());
+		
+			aggregator.removeUpTo(10 );
+			System.out.println("Capacity: "+aggregator.currentCapacity());
+
+			aggregator.add(11, new Tuple2<>("key2", 0));
+			aggregator.add(12, new Tuple2<>("key2", 0));
+			aggregator.add(13, new Tuple2<>("key2", 0));
+			aggregator.add(14, new Tuple2<>("key2", 1));
+			aggregator.update(14, new Tuple2<>("key2", 1));
+			
+			System.out.println("Total: "+aggregator.aggregate());
+			System.out.println("[12,14]: "+aggregator.aggregate(12,14));
+			aggregator.add(15, new Tuple2<>("key2", 1));
+			aggregator.update(15, new Tuple2<>("key2", 1));
+			aggregator.update(15, new Tuple2<>("key2", 1));
+			
+			System.out.println("Total: "+aggregator.aggregate());
+			System.out.println("[14,15]: "+aggregator.aggregate(14,15));
+			
+		
+		} catch (Exception e) {
+		fail(e.getMessage());
+		}
+		
+		
+	}
 	private void testSlidingEventTimeWindows(OneInputStreamOperatorTestHarness<Tuple2<String, Integer>, Tuple2<String, Integer>> testHarness) throws Exception {
 
 		long initialTime = 0L;
@@ -181,7 +256,7 @@ public class WindowOperatorTest {
 
 	@Test
 	@SuppressWarnings("unchecked")
-	public void testSlidingEventTimeWindowsApply() throws Exception {
+	public void testPreaggregateSlidingEventTimeWindowsApply() throws Exception {
 		closeCalled.set(0);
 
 		final int WINDOW_SIZE = 3;
@@ -192,14 +267,15 @@ public class WindowOperatorTest {
 		ListStateDescriptor<Tuple2<String, Integer>> stateDesc = new ListStateDescriptor<>("window-contents",
 				inputType.createSerializer(new ExecutionConfig()));
 
-		WindowOperator<String, Tuple2<String, Integer>, Iterable<Tuple2<String, Integer>>, Tuple2<String, Integer>, TimeWindow> operator = new WindowOperator<>(
-				SlidingEventTimeWindows.of(Time.of(WINDOW_SIZE, TimeUnit.SECONDS), Time.of(WINDOW_SLIDE, TimeUnit.SECONDS)),
+		PreaggregateWindowOperatorV2<String, Tuple2<String, Integer>, Iterable<Tuple2<String, Integer>>, Tuple2<String, Integer>, TimeWindow> operator = new PreaggregateWindowOperatorV2<>(
+				SlidingEventTimeWindowsOutOfOrder.of(Time.of(WINDOW_SIZE, TimeUnit.SECONDS), Time.of(WINDOW_SLIDE, TimeUnit.SECONDS)),
 				new TimeWindow.Serializer(),
 				new TupleKeySelector(),
 				BasicTypeInfo.STRING_TYPE_INFO.createSerializer(new ExecutionConfig()),
 				stateDesc,
 				new InternalIterableWindowFunction<>(new RichSumReducer<TimeWindow>()),
-				EventTimeTrigger.create());
+				EventTimeTrigger.create(),new SumReducer(),new Tuple2<String, Integer>("Key",0)
+				);
 
 		operator.setInputType(inputType, new ExecutionConfig());
 
@@ -209,9 +285,35 @@ public class WindowOperatorTest {
 		testHarness.configureForKeyedStream(new TupleKeySelector(), BasicTypeInfo.STRING_TYPE_INFO);
 
 		testHarness.open();
+		
+		long initialTime = 0L;
+		
+		
+		//testSlidingEventTimeWindows(testHarness);
+		testHarness.processElement(new StreamRecord<>(new Tuple2<>("key2", 1), initialTime + 1900));
+		testHarness.processWatermark(new Watermark(initialTime + 999));
+		testHarness.processElement(new StreamRecord<>(new Tuple2<>("key2", 1), initialTime + 1902));
+		
+		testHarness.processElement(new StreamRecord<>(new Tuple2<>("key2", 1), initialTime + 1200));
+		
+		
+		testHarness.processElement(new StreamRecord<>(new Tuple2<>("key2", 1), initialTime + 1202));
+		
+		testHarness.processElement(new StreamRecord<>(new Tuple2<>("key2", 1), initialTime + 1201));
+		
+		testHarness.processElement(new StreamRecord<>(new Tuple2<>("key2", 1), initialTime + 8901));
+		
+		testHarness.processElement(new StreamRecord<>(new Tuple2<>("key2", 1), initialTime + 8902));
+		
+		testHarness.processElement(new StreamRecord<>(new Tuple2<>("key2", 1), initialTime + 8903));
+		
+		testHarness.processWatermark(new Watermark(initialTime + 4000));
+		
+		testHarness.processWatermark(new Watermark(initialTime + 5000));
 
-		testSlidingEventTimeWindows(testHarness);
-
+		
+		System.out.println(testHarness.getOutput());
+		
 		testHarness.close();
 
 		// we close once in the rest...
@@ -444,7 +546,8 @@ public class WindowOperatorTest {
 		ReducingStateDescriptor<Tuple2<String, Integer>> stateDesc = new ReducingStateDescriptor<>(
 				"window-contents", new SumReducer(), inputType.createSerializer(new ExecutionConfig()));
 
-		WindowOperator<String, Tuple2<String, Integer>, Tuple2<String, Integer>, Tuple3<String, Long, Long>, TimeWindow> operator = new WindowOperator<>(
+		WindowOperator<String, Tuple2<String, Integer>, Tuple2<String, Integer>, Tuple3<String, Long, Long>, TimeWindow> operator = 
+				new WindowOperator<>(
 				EventTimeSessionWindows.withGap(Time.seconds(SESSION_SIZE)),
 				new TimeWindow.Serializer(),
 				new TupleKeySelector(),
@@ -845,6 +948,128 @@ public class WindowOperatorTest {
 	// ------------------------------------------------------------------------
 	//  UDFs
 	// ------------------------------------------------------------------------
+
+	@Test
+	@SuppressWarnings("unchecked")
+	public void testSlidingEventTimeWindowsApply() throws Exception {
+		closeCalled.set(0);
+	
+		final int WINDOW_SIZE = 3;
+		final int WINDOW_SLIDE = 1;
+	
+		TypeInformation<Tuple2<String, Integer>> inputType = TypeInfoParser.parse("Tuple2<String, Integer>");
+	
+		ListStateDescriptor<Tuple2<String, Integer>> stateDesc = new ListStateDescriptor<>("window-contents",
+				inputType.createSerializer(new ExecutionConfig()));
+	
+		WindowOperator<String, Tuple2<String, Integer>, Iterable<Tuple2<String, Integer>>, Tuple2<String, Integer>, TimeWindow> operator = new WindowOperator<>(
+				SlidingEventTimeWindows.of(Time.of(WINDOW_SIZE, TimeUnit.SECONDS), Time.of(WINDOW_SLIDE, TimeUnit.SECONDS)),
+				new TimeWindow.Serializer(),
+				new TupleKeySelector(),
+				BasicTypeInfo.STRING_TYPE_INFO.createSerializer(new ExecutionConfig()),
+				stateDesc,
+				new InternalIterableWindowFunction<>(new RichSumReducer<TimeWindow>()),
+				EventTimeTrigger.create());
+	
+		operator.setInputType(inputType, new ExecutionConfig());
+	
+		OneInputStreamOperatorTestHarness<Tuple2<String, Integer>, Tuple2<String, Integer>> testHarness =
+				new OneInputStreamOperatorTestHarness<>(operator);
+	
+		testHarness.configureForKeyedStream(new TupleKeySelector(), BasicTypeInfo.STRING_TYPE_INFO);
+	
+		testHarness.open();
+	
+		testSlidingEventTimeWindows(testHarness);
+	
+		testHarness.close();
+	
+		// we close once in the rest...
+		Assert.assertEquals("Close was not called.", 2, closeCalled.get());
+	}
+
+	@Test
+	@SuppressWarnings("unchecked")
+	public void testPreaggregateMultiQuery() throws Exception {
+		closeCalled.set(0);
+	
+		ArrayList<SlidingEventTimeWindows> setws= new ArrayList<>();
+		
+		int WINDOW_SIZE = 3;
+		int WINDOW_SLIDE = 1;
+		setws.add(SlidingEventTimeWindows.of(Time.of(WINDOW_SIZE, TimeUnit.SECONDS), Time.of(WINDOW_SLIDE, TimeUnit.SECONDS)));
+	
+		 WINDOW_SIZE = 4;
+		 WINDOW_SLIDE = 2;
+		setws.add(SlidingEventTimeWindows.of(Time.of(WINDOW_SIZE, TimeUnit.SECONDS), Time.of(WINDOW_SLIDE, TimeUnit.SECONDS)));
+			
+	
+		 WINDOW_SIZE = 1;
+		 WINDOW_SLIDE = 1;
+		setws.add(SlidingEventTimeWindows.of(Time.of(WINDOW_SIZE, TimeUnit.SECONDS), Time.of(WINDOW_SLIDE, TimeUnit.SECONDS)));
+		
+		 WINDOW_SIZE = 5;
+		 WINDOW_SLIDE = 2;
+		setws.add(SlidingEventTimeWindows.of(Time.of(WINDOW_SIZE, TimeUnit.SECONDS), Time.of(WINDOW_SLIDE, TimeUnit.SECONDS)));
+		
+		
+		TypeInformation<Tuple2<String, Integer>> inputType = TypeInfoParser.parse("Tuple2<String, Integer>");
+	
+		ListStateDescriptor<Tuple2<String, Integer>> stateDesc = new ListStateDescriptor<>("window-contents",
+				inputType.createSerializer(new ExecutionConfig()));
+	
+		PreaggregateWindowOperatorV2<String, Tuple2<String, Integer>, Iterable<Tuple2<String, Integer>>, Tuple2<String, Integer>, TimeWindow> operator = new PreaggregateWindowOperatorV2<>(
+				new MultiQueryWindowAssigner(setws, Collections.EMPTY_LIST, Collections.EMPTY_LIST),
+				new TimeWindow.Serializer(),
+				new TupleKeySelector(),
+				BasicTypeInfo.STRING_TYPE_INFO.createSerializer(new ExecutionConfig()),
+				stateDesc,
+				new InternalIterableWindowFunction<>(new RichSumReducer<TimeWindow>()),
+				EventTimeTrigger.create(),new SumReducer(),new Tuple2<String, Integer>("Key",0)
+				);
+	
+		operator.setInputType(inputType, new ExecutionConfig());
+	
+		OneInputStreamOperatorTestHarness<Tuple2<String, Integer>, Tuple2<String, Integer>> testHarness =
+				new OneInputStreamOperatorTestHarness<>(operator);
+	
+		testHarness.configureForKeyedStream(new TupleKeySelector(), BasicTypeInfo.STRING_TYPE_INFO);
+	
+		testHarness.open();
+		
+		long initialTime = 0L;
+		
+		
+		//testSlidingEventTimeWindows(testHarness);
+		testHarness.processElement(new StreamRecord<>(new Tuple2<>("key2", 1), initialTime + 3900));
+		testHarness.processWatermark(new Watermark(initialTime + 999));
+		testHarness.processElement(new StreamRecord<>(new Tuple2<>("key2", 1), initialTime + 3902));
+		
+		testHarness.processElement(new StreamRecord<>(new Tuple2<>("key2", 1), initialTime + 4200));
+		
+		
+		testHarness.processElement(new StreamRecord<>(new Tuple2<>("key2", 1), initialTime + 4202));
+		
+		testHarness.processElement(new StreamRecord<>(new Tuple2<>("key2", 1), initialTime + 4201));
+		
+		testHarness.processElement(new StreamRecord<>(new Tuple2<>("key2", 1), initialTime + 5901));
+		
+		testHarness.processElement(new StreamRecord<>(new Tuple2<>("key2", 1), initialTime + 5902));
+		
+		testHarness.processElement(new StreamRecord<>(new Tuple2<>("key2", 1), initialTime + 5903));
+		
+		testHarness.processWatermark(new Watermark(initialTime + 4000));
+		
+		testHarness.processWatermark(new Watermark(initialTime + 5000));
+	
+		
+		System.out.println(testHarness.getOutput());
+		
+		testHarness.close();
+	
+		// we close once in the rest...
+		Assert.assertEquals("Close was not called.", 2, closeCalled.get());
+	}
 
 	public static class SumReducer implements ReduceFunction<Tuple2<String, Integer>> {
 		private static final long serialVersionUID = 1L;
