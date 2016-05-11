@@ -67,6 +67,7 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -99,7 +100,7 @@ import static java.util.Objects.requireNonNull;
  * @param <W> The type of {@code Window} that the {@code WindowAssigner} assigns.
  */
 @Internal
-public class PreaggregateWindowOperatorV2<K, IN, ACC, OUT, W extends TimeWindow>
+public class PreaggregateWindowOperatorV2<K, IN, ACC, OUT, W extends Window>
 	extends AbstractUdfStreamOperator<OUT, InternalWindowFunction<ACC, OUT, K, W>>
 	implements OneInputStreamOperator<IN, OUT>, Triggerable, InputTypeConfigurable {
 
@@ -174,13 +175,14 @@ public class PreaggregateWindowOperatorV2<K, IN, ACC, OUT, W extends TimeWindow>
 	// ------------------------------------------------------------------------
 	private final IN identityValue;
 	private final HashMap<K, KeyContext> hmkeyContext;
-	private transient ReduceFunction<IN> reduceF;
+	private final ReduceFunction<IN> reduceF;
 	
 	
 	/**
 	 * Creates a new {@code WindowOperator} based on the given policies and user functions.
 	 */
-	public PreaggregateWindowOperatorV2(WindowAssigner<? super IN, W> windowAssigner,
+	public PreaggregateWindowOperatorV2(
+		WindowAssigner<? super IN, W> windowAssigner,
 		TypeSerializer<W> windowSerializer,
 		KeySelector<IN, K> keySelector,
 		TypeSerializer<K> keySerializer,
@@ -205,7 +207,7 @@ public class PreaggregateWindowOperatorV2<K, IN, ACC, OUT, W extends TimeWindow>
 		setChainingStrategy(ChainingStrategy.ALWAYS);
 		
 		//Out-of-orderPre-aggregate 
-		this.reduceF=reduceF;
+		this.reduceF=requireNonNull(reduceF);
 		this.identityValue=identityValue;
 		this.hmkeyContext=new LinkedHashMap<K, KeyContext>();
 				
@@ -345,7 +347,7 @@ public class PreaggregateWindowOperatorV2<K, IN, ACC, OUT, W extends TimeWindow>
 			if (kc == null) 
 			{
 				//Create the keykontext for the key
-				kc=new KeyContext<K,W,IN>(reduceF, inputSerializer, identityValue, 64);
+				kc=new KeyContext<K,W,IN>(key,reduceF, inputSerializer, identityValue, 128);
 				hmkeyContext.put(key, kc);
 			}
 			
@@ -365,7 +367,7 @@ public class PreaggregateWindowOperatorV2<K, IN, ACC, OUT, W extends TimeWindow>
 				for (W window: elementWindows) {
 					
 						AppendingState<IN, ACC> windowState = getPartitionedState(window, windowSerializer,windowStateDescriptor);
-						windowState.add(element.getValue());
+						//windowState.add(element.getValue());
 						
 						context.key = key;
 						context.window = window;
@@ -377,6 +379,7 @@ public class PreaggregateWindowOperatorV2<K, IN, ACC, OUT, W extends TimeWindow>
 			}
 			else
 			{
+				//System.out.println(element);
 				// Update partials 
 				kc.updatePartials(elementWindows, element.getValue(),element.getTimestamp());
 				
@@ -444,13 +447,20 @@ public class PreaggregateWindowOperatorV2<K, IN, ACC, OUT, W extends TimeWindow>
 
 		if (triggerResult.isFire()) {
 			timestampedCollector.setAbsoluteTimestamp(window.maxTimestamp());
-			ACC contents = windowState.get();
+			
 			
 			KeyContext<K, TimeWindow, IN> kContext=hmkeyContext.get(context.key);
 			
+			IN val=kContext.getWindowContent((TimeWindow) context.window);
+			kContext.removeWindow((TimeWindow) context.window);
 			//aggregate result
-			System.out.println(context.window+" Aggregate: "+kContext.getWindowContent(context.window));
 			
+			if(context.key.toString().equals("(45097,true)"))
+				System.out.println(" Aggregate: "+val+" # partials: "+kContext.getNumberOfPartials());
+			
+			windowState.add(val);
+			
+			ACC contents = windowState.get();
 			userFunction.apply(context.key, context.window, contents, timestampedCollector);
 
 		}
@@ -467,6 +477,7 @@ public class PreaggregateWindowOperatorV2<K, IN, ACC, OUT, W extends TimeWindow>
 	public final void processWatermark(Watermark mark) throws Exception {
 		processTriggersFor(mark);
 
+		System.out.println("Watermark: "+mark);
 		output.emitWatermark(mark);
 
 		this.currentWatermark = mark.getTimestamp();
@@ -522,7 +533,7 @@ public class PreaggregateWindowOperatorV2<K, IN, ACC, OUT, W extends TimeWindow>
 		processTriggersFor(new Watermark(currentWatermark));
 	}
 
-protected class KeyContext<K,W extends TimeWindow,T>{
+protected class KeyContext<K,W extends Window,T>{
 		
 	/**
 	 * PartialQueueElement ts * 
@@ -634,9 +645,10 @@ protected class KeyContext<K,W extends TimeWindow,T>{
 		
 		private TreeMap<Long,PartialQueueElement> partialsQueue;
 		
-		public KeyContext(ReduceFunction<T> reduceF, TypeSerializer<T> inputSerializer, T identityValue, int capacity)
+		public KeyContext(K key, ReduceFunction<T> reduceF, TypeSerializer<T> inputSerializer, T identityValue, int capacity)
 		{
-			this.reduceF=reduceF;
+			this.key=key;
+			this.reduceF=requireNonNull(reduceF);
 			this.partial_id=1;
 			this.aggregator= new EagerHeapAggregator<T>(reduceF, inputSerializer, identityValue, capacity);
 				
@@ -656,6 +668,32 @@ protected class KeyContext<K,W extends TimeWindow,T>{
 			
 		}
 		
+		public void removeWindow(TimeWindow window) throws Exception {
+		Integer partial=hmWindowBegins.get(window.getStart());
+		if(partial!=null)
+			{
+			aggregator.removeUpTo(partial);
+			Iterator<Partial<T>> iter=activePartials.iterator();
+			
+			while(iter.hasNext())
+			{
+				Partial<T>p=iter.next();
+					if(p.partial_id<partial)
+						iter.remove();
+			}
+			hmWindowBegins.remove(partial);
+			hmWindowEnds.remove(partial);
+			}
+		
+		
+			
+		}
+
+		public int getNumberOfPartials() {
+			// TODO Auto-generated method stub
+			return activePartials.size();
+		}
+
 		public void update(int partial_id, T value) throws Exception {
 			
 			if(partial_id==currentPartial.partial_id)
@@ -671,13 +709,25 @@ protected class KeyContext<K,W extends TimeWindow,T>{
 
 		public T getWindowContent(W window) throws Exception 
 		{
-			System.out.println(window+" Start: "+hmWindowBegins.get(window)+" End: "+hmWindowEnds.get(window));
-			if(hmWindowBegins.get(window)==null||hmWindowEnds.get(window)==null)
+			//System.out.println("K: "+key+" "+window+" Start: "+hmWindowBegins.get(window)+" End: "+hmWindowEnds.get(window));
+			if(hmWindowBegins.get(window)==null)
 			{
 				return identityValue;
 			}
+			else
+			{
+				if(hmWindowEnds.get(window)==null)
+				{
+					T aggregatorTotal=aggregator.aggregate(hmWindowBegins.get(window));
+					return reduceF.reduce(aggregatorTotal, currentPartial.partial);
+				}
+				else
+				{
+					return aggregator.aggregate(hmWindowBegins.get(window), hmWindowEnds.get(window));
+				}
+			}
 			
-			return aggregator.aggregate(hmWindowBegins.get(window), hmWindowEnds.get(window));
+			
 		}
 
 		
@@ -686,24 +736,24 @@ protected class KeyContext<K,W extends TimeWindow,T>{
 			
 			for (W window : elementWindows) {
 				
-				if(window.getStart()>lastTimestamp)
+				if(((TimeWindow)window).getStart()>lastTimestamp)
 				{
-					if(!partialsQueue.containsKey(window.getStart()))
+					if(!partialsQueue.containsKey(((TimeWindow)window).getStart()))
 					{
-						partialsQueue.put(window.getStart(),new PartialQueueElement(window.getStart(), Collections.singletonList(window), Collections.EMPTY_LIST));
+						partialsQueue.put(((TimeWindow)window).getStart(),new PartialQueueElement(((TimeWindow)window).getStart(), Collections.singletonList(window), Collections.EMPTY_LIST));
 					}
 					else
 					{
-						PartialQueueElement pqe=partialsQueue.get(window.getStart());
+						PartialQueueElement pqe=partialsQueue.get(((TimeWindow)window).getStart());
 						pqe.addStartWindow(window);
 					}
-					if(!partialsQueue.containsKey(window.getEnd()))
+					if(!partialsQueue.containsKey(((TimeWindow)window).getEnd()))
 					{
-						partialsQueue.put(window.getEnd(),new PartialQueueElement(window.getEnd(), Collections.EMPTY_LIST,Collections.singletonList(window)));
+						partialsQueue.put(((TimeWindow)window).getEnd(),new PartialQueueElement(((TimeWindow)window).getEnd(), Collections.EMPTY_LIST,Collections.singletonList(window)));
 					}
 					else
 					{
-						PartialQueueElement pqe=partialsQueue.get(window.getEnd());
+						PartialQueueElement pqe=partialsQueue.get(((TimeWindow)window).getEnd());
 						pqe.addEndWindow(window);
 					}
 				}

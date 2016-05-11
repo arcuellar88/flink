@@ -25,6 +25,8 @@ import org.apache.flink.api.common.functions.ReduceFunction;
 import org.apache.flink.api.common.typeutils.TypeSerializer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import static java.util.Objects.requireNonNull;
+
 
 import java.util.*;
 
@@ -90,7 +92,7 @@ public class EagerHeapAggregator<T> implements WindowAggregator<T> {
     public EagerHeapAggregator(ReduceFunction<T> reduceFunction, TypeSerializer<T> serializer, T identityValue, int capacity) {
         if (((capacity & -capacity) != capacity))
             throw new IllegalArgumentException("Capacity should be a power of two");
-        this.reduceFunction = reduceFunction;
+        this.reduceFunction = requireNonNull(reduceFunction);
         this.serializer = serializer;
         this.identityValue = identityValue;
         this.numLeaves = capacity;
@@ -278,6 +280,9 @@ public class EagerHeapAggregator<T> implements WindowAggregator<T> {
             case AGGREGATING:
           //      stats.registerAggregate();
         }
+        //System.out.println("Reduce Function: "+reduceFunction);
+        //System.out.println("serializer: "+serializer);
+
         return reduceFunction.reduce(serializer.copy(val1), serializer.copy(val2));
     }
 
@@ -453,7 +458,7 @@ public class EagerHeapAggregator<T> implements WindowAggregator<T> {
      */
     public int currentCapacity() {
         int capacity = numLeaves - leafIndex.size();
-        LOG.info("CURRENT CAPACITY : {}", capacity);
+       // LOG.info("CURRENT CAPACITY : {}", capacity);
         return capacity;
     }
 
