@@ -17,6 +17,7 @@
 
 package org.apache.flink.streaming.examples.windowing;
 
+import org.apache.flink.api.common.functions.ReduceFunction;
 import org.apache.flink.api.java.tuple.Tuple3;
 import org.apache.flink.api.java.utils.ParameterTool;
 import org.apache.flink.streaming.api.TimeCharacteristic;
@@ -26,6 +27,7 @@ import org.apache.flink.streaming.api.functions.source.SourceFunction;
 import org.apache.flink.streaming.api.watermark.Watermark;
 import org.apache.flink.streaming.api.windowing.assigners.EventTimeSessionWindows;
 import org.apache.flink.streaming.api.windowing.time.Time;
+import org.apache.flink.streaming.examples.windowing.outoforder.PreaggregateReduceFunction;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -79,10 +81,15 @@ public class SessionWindowing {
 				});
 
 		// We create sessions for each id with max timeout of 3 time units
+//		DataStream<Tuple3<String, Long, Integer>> aggregated = source
+//				.keyBy(0)
+//				.window(EventTimeSessionWindows.withGap(Time.milliseconds(3L)))
+//				.sum(2);
+		
 		DataStream<Tuple3<String, Long, Integer>> aggregated = source
 				.keyBy(0)
 				.window(EventTimeSessionWindows.withGap(Time.milliseconds(3L)))
-				.sum(2);
+				.reduce(new SumReduceF());
 
 		if (fileOutput) {
 			aggregated.writeAsText(params.get("output"));
@@ -92,5 +99,35 @@ public class SessionWindowing {
 		}
 
 		env.execute();
+	
+	}
+	public static class SumReduceF extends PreaggregateReduceFunction<Tuple3<String, Long, Integer>>
+	{
+
+		/**
+		 * 
+		 */
+		private static final long serialVersionUID = 1L;
+
+		@Override
+		public Tuple3<String, Long, Integer> reduce(
+				Tuple3<String, Long, Integer> t1,
+				Tuple3<String, Long, Integer> t2) throws Exception {
+			
+			if(t1.f0.equals("IdentityValue"))
+			{
+				return new Tuple3<String, Long, Integer>(t2.f0,t2.f1,t1.f2+t2.f2);
+			}
+			else
+			{
+				return new Tuple3<String, Long, Integer>(t1.f0,t1.f1,t1.f2+t2.f2);
+			}
+		}
+
+		@Override
+		public Tuple3<String, Long, Integer> getIdentityValue() {
+			return new Tuple3<String, Long, Integer>("IdentityValue",0L,0);
+		}
+		
 	}
 }
