@@ -18,15 +18,13 @@
 
 package org.apache.flink.streaming.api.datastream;
 
-import java.lang.reflect.Field;
 import java.lang.reflect.ParameterizedType;
-import java.lang.reflect.Type;
-import java.lang.reflect.TypeVariable;
 
-import org.apache.flink.annotation.PublicEvolving;
 import org.apache.flink.annotation.Public;
+import org.apache.flink.annotation.PublicEvolving;
 import org.apache.flink.api.common.functions.FoldFunction;
 import org.apache.flink.api.common.functions.Function;
+import org.apache.flink.api.common.functions.PreaggregateReduceFunction;
 import org.apache.flink.api.common.functions.ReduceFunction;
 import org.apache.flink.api.common.functions.RichFunction;
 import org.apache.flink.api.common.state.FoldingStateDescriptor;
@@ -57,10 +55,10 @@ import org.apache.flink.streaming.api.windowing.windows.Window;
 import org.apache.flink.streaming.runtime.operators.windowing.AccumulatingProcessingTimeWindowOperator;
 import org.apache.flink.streaming.runtime.operators.windowing.AggregatingProcessingTimeWindowOperator;
 import org.apache.flink.streaming.runtime.operators.windowing.EvictingWindowOperator;
-import org.apache.flink.streaming.runtime.operators.windowing.PreaggregateWindowOperator;
+import org.apache.flink.streaming.runtime.operators.windowing.PreaggregateWindowOperatorV2;
+import org.apache.flink.streaming.runtime.operators.windowing.WindowOperator;
 import org.apache.flink.streaming.runtime.operators.windowing.functions.InternalIterableWindowFunction;
 import org.apache.flink.streaming.runtime.operators.windowing.functions.InternalSingleValueWindowFunction;
-import org.apache.flink.streaming.runtime.operators.windowing.WindowOperator;
 import org.apache.flink.streaming.runtime.streamrecord.StreamRecord;
 import org.apache.flink.streaming.runtime.streamrecord.StreamRecordSerializer;
 
@@ -302,6 +300,9 @@ public class WindowedStream<T, K, W extends Window> {
 					trigger);
 			
 			
+			
+			
+			
 		}
 
 		return input.transform(opName, resultType, operator);
@@ -373,9 +374,11 @@ public class WindowedStream<T, K, W extends Window> {
 					trigger,
 					evictor);
 
-		} else {
+		} else 
+		{
 			ReducingStateDescriptor<T> stateDesc = new ReducingStateDescriptor<>("window-contents",
 				reduceFunction,
+				
 				input.getType().createSerializer(getExecutionEnvironment().getConfig()));
 
 			//System.out.println(reduceFunction.getIdentityValue());
@@ -391,34 +394,39 @@ public class WindowedStream<T, K, W extends Window> {
 					trigger);
 			
 			
-			
-		 	//W w=null;
-			Class<W> clazz = null;
-			
-			System.out.println("Superclass: "+windowAssigner.getClass().getGenericSuperclass());
-			Object o= windowAssigner.getClass().getGenericSuperclass();
-			if(o instanceof ParameterizedType)
-				{
-				clazz=(Class<W>)((ParameterizedType) o).getActualTypeArguments()[1];
-				System.out.println(" ParameterizedType "+clazz);
-				if(clazz.isAssignableFrom(TimeWindow.class))
-				{
-					//K, IN, ACC, OUT, W extends TimeWindow
-					operator = new PreaggregateWindowOperator<>(windowAssigner,
-							windowAssigner.getWindowSerializer(getExecutionEnvironment().getConfig()),
-							keySel,
-							input.getKeyType().createSerializer(getExecutionEnvironment().getConfig()),
-							stateDesc,
-							new InternalSingleValueWindowFunction<>(function),
-							trigger,reduceFunction,null);
+					// OLD VERSION			
+					//	W w=null;
+					//			Class<W> clazz = null;
+					//			
+					//			System.out.println("Superclass: "+windowAssigner.getClass().getGenericSuperclass());
+					//			Object o= windowAssigner.getClass().getGenericSuperclass();
+					//			if(o instanceof ParameterizedType)
+					//				{
+					//				clazz=(Class<W>)((ParameterizedType) o).getActualTypeArguments()[1];
+					//				System.out.println(" ParameterizedType "+clazz);
+					//				if(clazz.isAssignableFrom(TimeWindow.class))
+					//				{		
+					//			}
+					//		}
+					if(reduceFunction instanceof PreaggregateReduceFunction)
+					{
+						PreaggregateReduceFunction<T> rf= (PreaggregateReduceFunction<T>)reduceFunction;
+						//K, IN, ACC, OUT, W extends TimeWindow
+						operator = new PreaggregateWindowOperatorV2<>(
+								windowAssigner,
+								windowAssigner.getWindowSerializer(getExecutionEnvironment().getConfig()),
+								keySel,
+								input.getKeyType().createSerializer(getExecutionEnvironment().getConfig()),
+								stateDesc,
+								new InternalSingleValueWindowFunction<>(function),
+								trigger,
+								rf,
+								rf.getIdentityValue());
+					}
+					
 				}
 				
-			}
-			
-			
-			
-			
-		}
+
 
 		return input.transform(opName, resultType, operator);
 	}

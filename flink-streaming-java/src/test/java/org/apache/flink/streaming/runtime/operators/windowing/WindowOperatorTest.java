@@ -1078,6 +1078,11 @@ public class WindowOperatorTest {
 				Tuple2<String, Integer> value2) throws Exception {
 			return new Tuple2<>(value2.f0, value1.f1 + value2.f1);
 		}
+		@Override
+		public Tuple2<String, Integer> getIdentityValue() {
+			// TODO Auto-generated method stub
+			return null;
+		}
 	}
 
 

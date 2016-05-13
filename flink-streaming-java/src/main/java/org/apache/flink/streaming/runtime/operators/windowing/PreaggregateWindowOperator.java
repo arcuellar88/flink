@@ -180,7 +180,8 @@ public class PreaggregateWindowOperator<K, IN, ACC, OUT, W extends Window>
 	/**
 	 * Creates a new {@code WindowOperator} based on the given policies and user functions.
 	 */
-	public PreaggregateWindowOperator(WindowAssigner<? super IN, W> windowAssigner,
+	public PreaggregateWindowOperator(
+		WindowAssigner<? super IN, W> windowAssigner,
 		TypeSerializer<W> windowSerializer,
 		KeySelector<IN, K> keySelector,
 		TypeSerializer<K> keySerializer,

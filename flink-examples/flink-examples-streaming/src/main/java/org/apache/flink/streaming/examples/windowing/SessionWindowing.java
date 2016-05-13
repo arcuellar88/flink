@@ -17,7 +17,7 @@
 
 package org.apache.flink.streaming.examples.windowing;
 
-import org.apache.flink.api.common.functions.ReduceFunction;
+import org.apache.flink.api.common.functions.PreaggregateReduceFunction;
 import org.apache.flink.api.java.tuple.Tuple3;
 import org.apache.flink.api.java.utils.ParameterTool;
 import org.apache.flink.streaming.api.TimeCharacteristic;
@@ -27,7 +27,6 @@ import org.apache.flink.streaming.api.functions.source.SourceFunction;
 import org.apache.flink.streaming.api.watermark.Watermark;
 import org.apache.flink.streaming.api.windowing.assigners.EventTimeSessionWindows;
 import org.apache.flink.streaming.api.windowing.time.Time;
-import org.apache.flink.streaming.examples.windowing.outoforder.PreaggregateReduceFunction;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -105,9 +104,9 @@ public class SessionWindowing {
 	{
 
 		/**
-		 * 
+		 * serialVersionUID
 		 */
-		private static final long serialVersionUID = 1L;
+		private static final long serialVersionUID = -4148614485201728843L;
 
 		@Override
 		public Tuple3<String, Long, Integer> reduce(

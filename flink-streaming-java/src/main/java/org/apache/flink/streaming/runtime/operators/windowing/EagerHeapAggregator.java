@@ -81,6 +81,7 @@ public class EagerHeapAggregator<T> implements WindowAggregator<T> {
     private enum AGG_STATE {UPDATING, AGGREGATING}
 
     private AGG_STATE currentState = AGG_STATE.UPDATING;
+    //private String lastRemove;
 
 
     /**
@@ -103,6 +104,7 @@ public class EagerHeapAggregator<T> implements WindowAggregator<T> {
         int fullCapacity = 2 * capacity - 1;
       //  stats.registerBufferSize(fullCapacity);
         this.circularHeap = new ArrayList<T>(Collections.nCopies(fullCapacity, identityValue));
+        //lastRemove="";
     }
 
   
@@ -125,6 +127,7 @@ public class EagerHeapAggregator<T> implements WindowAggregator<T> {
             resize(2 * numLeaves);
         }
         incrBack();
+        //lastRemove+="ADD: partialid: "+partialId+" position: "+back+" circularheap: "+circularHeap.size()+" Front:"+front+"\n";
         leafIndex.put(partialId, back);
         circularHeap.set(back, serializer.copy(partialVal));
         if (commit) {
@@ -140,7 +143,8 @@ public class EagerHeapAggregator<T> implements WindowAggregator<T> {
      * @param newCapacity
      */
     private void resize(int newCapacity) throws Exception {
-        LOG.info("RESIZING HEAP TO {}", newCapacity);
+       // LOG.info("RESIZING HEAP TO {}", newCapacity);
+    	//lastRemove+="Resize: "+newCapacity+"\n";
         int fullCapacity = 2 * newCapacity - 1;
         List<T> newHeap = new ArrayList<T>(Collections.nCopies(fullCapacity, identityValue));
         Integer[] updated = new Integer[leafIndex.size()];
@@ -156,6 +160,11 @@ public class EagerHeapAggregator<T> implements WindowAggregator<T> {
         this.front = newCapacity - 1;
         this.circularHeap = newHeap;
         update(updated);
+//        lastRemove+="Resize: "+newCapacity+" front: "+front+" back: "+back+"\n";
+//        lastRemove+="leafIndex"+"\n";
+//     	for (Integer integer : leafIndex.keySet()) {
+//     		lastRemove+="Partial: "+integer+" LeafID: "+leafIndex.get(integer)+"\n";
+//		}
       //  stats.registerBufferSize(fullCapacity);
     }
 
@@ -189,7 +198,14 @@ public class EagerHeapAggregator<T> implements WindowAggregator<T> {
             if (!leafIndex.containsKey(partialId)) continue;
             int leafID = leafIndex.get(partialId);
             leafIndex.remove(partialId);
-            if (leafID != front) throw new IllegalArgumentException("Cannot evict out of order");
+            if (leafID != front) 
+            	{
+            	//System.out.println(lastRemove);
+            	//System.out.println("=================Exception=================");
+            	//System.out.println("Exception, partialId:"+partialId+ " LeafIndex: "+leafID+" Front: "+front);
+            	
+            	throw new IllegalArgumentException("Cannot evict out of order");
+            	}
             circularHeap.set(front, identityValue);
             incrFront();
             leafBag.add(leafID);
@@ -197,8 +213,10 @@ public class EagerHeapAggregator<T> implements WindowAggregator<T> {
         update(leafBag.toArray(new Integer[leafBag.size()]));
         // shrink to half when the utilization is only one quarter
         if (currentCapacity() > 3 * numLeaves / 4 && numLeaves >= 4) {
-            resize(numLeaves / 2);
+        	//lastRemove+="resize: "+(numLeaves / 2)+"\n";
+        	resize(numLeaves / 2);
         }
+       // lastRemove+="After remove: "+" Front: "+front+" Back: "+back+"\n";
     }
 
     @Override
@@ -212,6 +230,21 @@ public class EagerHeapAggregator<T> implements WindowAggregator<T> {
                 toRemove.add(mapping.getKey());
             }
         }
+//        if(id!=10)
+//        {
+//        	lastRemove+="=================RemoveUpTo=================";
+//        	 lastRemove+="Last partial: "+id+"\n";
+//             for (Integer integer : toRemove) {
+//             	lastRemove+="rPartial: "+integer+" leafID: "+leafIndex.get(integer)+"\n";
+//     		}
+//            lastRemove+="leafIndex"+"\n";
+//         	for (Integer integer : leafIndex.keySet()) {
+//         		lastRemove+="Partial: "+integer+" LeafID: "+leafIndex.get(integer)+"\n";
+//			}
+//             
+//        }
+       
+        
         remove(toRemove.toArray(new Integer[toRemove.size()]));
     }
 
@@ -469,7 +502,7 @@ public class EagerHeapAggregator<T> implements WindowAggregator<T> {
 	        if (currentCapacity() == 0) {
 	            resize(2 * numLeaves);
 	        }
-	        incrBack();
+	        //incrBack();
 	        int back_id=leafIndex.get(id);
 	        T current_val=circularHeap.get(back_id);
 	        
@@ -477,6 +510,13 @@ public class EagerHeapAggregator<T> implements WindowAggregator<T> {
 	       
 	        update(back_id);
 		
+	}
+
+
+	@Override
+	public int getNumberOfPartials() {
+		// TODO Auto-generated method stub
+		return numLeaves;
 	}
 
 }

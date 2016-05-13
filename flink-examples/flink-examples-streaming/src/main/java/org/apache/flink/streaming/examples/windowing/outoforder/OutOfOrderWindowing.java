@@ -1,24 +1,20 @@
-package org.apache.flink.streaming.examples.windowing;
+package org.apache.flink.streaming.examples.windowing.outoforder;
 
 import org.apache.flink.api.common.functions.FilterFunction;
 import org.apache.flink.api.common.functions.MapFunction;
-import org.apache.flink.api.common.functions.ReduceFunction;
+import org.apache.flink.api.common.functions.PreaggregateReduceFunction;
 import org.apache.flink.api.java.tuple.Tuple;
 import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.api.java.tuple.Tuple3;
 import org.apache.flink.api.java.tuple.Tuple4;
 import org.apache.flink.api.java.tuple.Tuple5;
+import org.apache.flink.core.fs.FileSystem.WriteMode;
 import org.apache.flink.streaming.api.TimeCharacteristic;
+import org.apache.flink.streaming.api.datastream.DataStream;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
 import org.apache.flink.streaming.api.functions.windowing.WindowFunction;
-import org.apache.flink.streaming.api.scala.KeyedStream;
-import org.apache.flink.streaming.api.windowing.time.Time;
 import org.apache.flink.streaming.api.windowing.windows.TimeWindow;
-import org.apache.flink.streaming.api.datastream.DataStream;
-import org.apache.flink.streaming.examples.windowing.PopularPlaces.GridCellMatcher;
-import org.apache.flink.streaming.examples.windowing.PopularPlaces.GridToCoordinates;
 import org.apache.flink.util.Collector;
-import org.joda.time.LocalDateTime;
 
 import com.dataartisans.flinktraining.exercises.datastream_java.datatypes.TaxiRide;
 import com.dataartisans.flinktraining.exercises.datastream_java.sources.TaxiRideSource;
@@ -69,44 +65,53 @@ public class OutOfOrderWindowing {
 		
 		//Filter
 		DataStream<TaxiRide>filteredRides=rides.filter(new NewYorkCityareaFilter());
+		DataStream<Tuple2<Long,Boolean>> mapFilterRides=filteredRides.map(new MapFunction<TaxiRide, Tuple2<Long,Boolean>>() {
+
+			@Override
+			public Tuple2<Long, Boolean> map(TaxiRide t) throws Exception {
+				// TODO Auto-generated method stub
+				return new Tuple2<Long,Boolean>(t.rideId,t.isStart);
+			}
+		});
 		// print the filtered stream
-		DataStream<Tuple5<Float, Float, Long, Boolean, Integer>> popularSpots =
-				filteredRides.map(new GridCellMatcher())
-				// partition by cell id and event type
-				.<KeyedStream<Tuple2<Integer, Boolean>, Tuple2<Integer, Boolean>>>keyBy(0, 1)
-				// build sliding window
-				.timeWindow(Time.minutes(15), Time.minutes(5))
-				.apply(new CountInCell(),new RideCounter())
-				.filter(new FilterFunction<Tuple4<Integer, Long, Boolean, Integer>>() {
-					@Override
-					public boolean filter(Tuple4<Integer, Long, Boolean, Integer> count) throws Exception {
-						return count.f3 >= popThreshold;
-					}
-				})
-				// map grid cell to coordinates
-				.map(new GridToCoordinates());
+//		DataStream<Tuple5<Float, Float, Long, Boolean, Integer>> popularSpots =
+//				filteredRides.map(new GridCellMatcher())
+//				// partition by cell id and event type
+//				.<KeyedStream<Tuple2<Integer, Boolean>, Tuple2<Integer, Boolean>>>keyBy(0, 1)
+//				// build sliding window
+//				.timeWindow(Time.minutes(15), Time.minutes(5))
+//				.apply(new CountInCell(),new RideCounter())
+//				.filter(new FilterFunction<Tuple4<Integer, Long, Boolean, Integer>>() {
+//					@Override
+//					public boolean filter(Tuple4<Integer, Long, Boolean, Integer> count) throws Exception {
+//						return count.f3 >= popThreshold;
+//					}
+//				})
+//				// map grid cell to coordinates
+//				.map(new GridToCoordinates());
 		
-		popularSpots.print();
 		
+		//popularSpots.writeAsCsv("/Users/alejandrorodriguez/Documents/Thesis/datasets/nycTaxiRides_popularSpots.csv",WriteMode.OVERWRITE);
+		mapFilterRides.writeAsCsv("/Users/alejandrorodriguez/Documents/Thesis/datasets/nycTaxiRides_filteredRides.csv",WriteMode.OVERWRITE);
 		// run the cleansing pipeline
 		env.execute("Taxi Ride Cleansing");
 		
 			
 	}
 	
-	public static class CountInCell implements ReduceFunction<Tuple3<Integer,Boolean,Integer>>{
-		
-		@Override
-		public Tuple3<Integer,Boolean,Integer> getIdentityValue()
-		{
-			return new Tuple3<>(0,false,0);
-		}
+	public static class CountInCell extends PreaggregateReduceFunction<Tuple3<Integer,Boolean,Integer>>{
 		
 		@Override
 		public Tuple3<Integer, Boolean,Integer> reduce(Tuple3<Integer, Boolean,Integer> t1,
 				Tuple3<Integer, Boolean,Integer> t2) throws Exception {
 		
 			return new Tuple3<Integer, Boolean,Integer>(t1.f0,t2.f1,t1.f2+t2.f2+1);
+		}
+		
+		@Override
+		public Tuple3<Integer,Boolean,Integer> getIdentityValue()
+		{
+			return new Tuple3<>(0,false,0);
 		}
 	}
 	

@@ -182,6 +182,13 @@ under the License.
 			<type>jar</type>
 			<scope>test</scope>
 		</dependency>
+
+		<dependency>
+	  	<groupId>com.dataartisans</groupId>
+  		<artifactId>flink-training-exercises</artifactId>
+  		<version>0.3</version>
+		</dependency>
+
 	</dependencies>
 
 	<!-- this section defines the module versions that are used if nothing else is specified. -->
@@ -393,6 +400,11 @@ under the License.
 				<groupId>com.fasterxml.jackson.core</groupId>
 				<artifactId>jackson-annotations</artifactId>
 				<version>${jackson.version}</version>
+			</dependency>
+			<dependency>
+    			<groupId>de.javakaffee</groupId>
+  			    <artifactId>kryo-serializers</artifactId>
+   				<version>0.30</version>
 			</dependency>
 		</dependencies>
 	</dependencyManagement>
