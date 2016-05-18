@@ -56,6 +56,7 @@ import org.apache.flink.streaming.runtime.operators.windowing.AccumulatingProces
 import org.apache.flink.streaming.runtime.operators.windowing.AggregatingProcessingTimeWindowOperator;
 import org.apache.flink.streaming.runtime.operators.windowing.EvictingWindowOperator;
 import org.apache.flink.streaming.runtime.operators.windowing.PreaggregateWindowOperatorV2;
+import org.apache.flink.streaming.runtime.operators.windowing.PreaggregateWindowOperatorV3;
 import org.apache.flink.streaming.runtime.operators.windowing.WindowOperator;
 import org.apache.flink.streaming.runtime.operators.windowing.functions.InternalIterableWindowFunction;
 import org.apache.flink.streaming.runtime.operators.windowing.functions.InternalSingleValueWindowFunction;
@@ -411,17 +412,21 @@ public class WindowedStream<T, K, W extends Window> {
 					if(reduceFunction instanceof PreaggregateReduceFunction)
 					{
 						PreaggregateReduceFunction<T> rf= (PreaggregateReduceFunction<T>)reduceFunction;
-						//K, IN, ACC, OUT, W extends TimeWindow
-						operator = new PreaggregateWindowOperatorV2<>(
-								windowAssigner,
-								windowAssigner.getWindowSerializer(getExecutionEnvironment().getConfig()),
-								keySel,
-								input.getKeyType().createSerializer(getExecutionEnvironment().getConfig()),
-								stateDesc,
-								new InternalSingleValueWindowFunction<>(function),
-								trigger,
-								rf,
-								rf.getIdentityValue());
+						if(rf.getWindowOperator().equals("V2"))
+						{
+							//K, IN, ACC, OUT, W extends TimeWindow
+							operator = new PreaggregateWindowOperatorV2<>(
+									windowAssigner,
+									windowAssigner.getWindowSerializer(getExecutionEnvironment().getConfig()),
+									keySel,
+									input.getKeyType().createSerializer(getExecutionEnvironment().getConfig()),
+									stateDesc,
+									new InternalSingleValueWindowFunction<>(function),
+									trigger,
+									rf,
+									rf.getIdentityValue());
+						}
+
 					}
 					
 				}
