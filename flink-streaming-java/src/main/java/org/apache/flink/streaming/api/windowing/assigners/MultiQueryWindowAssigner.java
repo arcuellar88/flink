@@ -12,20 +12,25 @@ import org.apache.flink.streaming.api.windowing.triggers.EventTimeTrigger;
 import org.apache.flink.streaming.api.windowing.triggers.Trigger;
 import org.apache.flink.streaming.api.windowing.windows.TimeWindow;
 
-public class MultiQueryWindowAssigner extends WindowAssigner<Object, TimeWindow> {
+public class MultiQueryWindowAssigner extends WindowAssignerOutOfOrder<Object, TimeWindow> {
 
 	/**
 	 * 
 	 */
 	private static final long serialVersionUID = 1L;
 	
-	private List<SlidingEventTimeWindows> slidingWindows;
+	private List<SlidingEventTimeWindowsOutOfOrder> slidingWindows;
 	private List<TumblingEventTimeWindows> tumblingWindows;
 	private List<EventTimeSessionWindows> sessionWindows;
 	
+	public MultiQueryWindowAssigner()
+	{
+		this.slidingWindows=new ArrayList<SlidingEventTimeWindowsOutOfOrder>();
+		this.tumblingWindows=new ArrayList<TumblingEventTimeWindows>();
+		this.sessionWindows=new ArrayList<EventTimeSessionWindows>();
+	}
 	
-	
-	public MultiQueryWindowAssigner(List<SlidingEventTimeWindows> slidingWindows,List<TumblingEventTimeWindows> tumblingWindows, List<EventTimeSessionWindows> sessionWindows )
+	public MultiQueryWindowAssigner(List<SlidingEventTimeWindowsOutOfOrder> slidingWindows,List<TumblingEventTimeWindows> tumblingWindows, List<EventTimeSessionWindows> sessionWindows )
 	{
 		this.slidingWindows=slidingWindows;
 		this.tumblingWindows=tumblingWindows;
@@ -37,7 +42,7 @@ public class MultiQueryWindowAssigner extends WindowAssigner<Object, TimeWindow>
 		
 		List<TimeWindow> windowAssigners= new ArrayList<TimeWindow>();
 		
-		for (SlidingEventTimeWindows sw : slidingWindows) {
+		for (SlidingEventTimeWindowsOutOfOrder sw : slidingWindows) {
 			windowAssigners=(List<TimeWindow>) CollectionUtils.union(windowAssigners, sw.assignWindows(element, timestamp));
 		}
 		for (TumblingEventTimeWindows tw : tumblingWindows) {
@@ -61,6 +66,31 @@ public class MultiQueryWindowAssigner extends WindowAssigner<Object, TimeWindow>
 			ExecutionConfig executionConfig) {
 		
 		return new TimeWindow.Serializer();
+	}
+
+	public void addSlidingWindowAssigner(
+			SlidingEventTimeWindowsOutOfOrder wa) {
+		slidingWindows.add(wa);
+		
+	}
+
+	public void addSessionWindowAssigner(
+			WindowAssigner<Object, TimeWindow> loadSessionWindowAssigner) {
+		// TODO Auto-generated method stub
+		
+	}
+
+	@Override
+	public Collection<TimeWindow> assignWindowsOutOfOrder(Object element,
+			long timestamp, long lastStart) {
+		
+		List<TimeWindow> windows= new ArrayList<TimeWindow>();
+		
+		for (SlidingEventTimeWindowsOutOfOrder sw : slidingWindows) {
+			windows=(List<TimeWindow>) CollectionUtils.union(windows, sw.assignWindows(element, timestamp));
+		}
+		
+		return windows;
 	}
 
 }

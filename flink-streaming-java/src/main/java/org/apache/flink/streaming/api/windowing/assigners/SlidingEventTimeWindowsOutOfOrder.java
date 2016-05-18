@@ -45,7 +45,7 @@ import java.util.List;
  * } </pre>
  */
 @PublicEvolving
-public class SlidingEventTimeWindowsOutOfOrder extends WindowAssigner<Object, TimeWindow> {
+public class SlidingEventTimeWindowsOutOfOrder extends WindowAssignerOutOfOrder<Object, TimeWindow> {
 	private static final long serialVersionUID = 1L;
 
 	private final long size;
@@ -62,22 +62,28 @@ public class SlidingEventTimeWindowsOutOfOrder extends WindowAssigner<Object, Ti
 
 	@Override
 	public Collection<TimeWindow> assignWindows(Object element, long timestamp) {
-		
-		
+			
 		if (timestamp > Long.MIN_VALUE) {
 			
 			List<TimeWindow> windows = new ArrayList<>((int) (size / slide));
 			
 			long lastStart = timestamp - timestamp % slide;
+			
 			if(this.maxTimestamp>Long.MIN_VALUE)
-				lastStart=maxTimestamp;
+			{
+				for (long start = this.maxTimestamp; start < timestamp - size; start += slide) 
+				{
+					windows.add(new TimeWindow(start, start + size));
+				}
+			}
+			
+			if(lastStart>maxTimestamp)
+				maxTimestamp=lastStart;
 			
 			for (long start = lastStart;
 				start > timestamp - size;
 				start -= slide) {
 				windows.add(new TimeWindow(start, start + size));
-				if(timestamp>maxTimestamp)
-					maxTimestamp=start + size;
 			}
 			
 			
@@ -123,5 +129,12 @@ public class SlidingEventTimeWindowsOutOfOrder extends WindowAssigner<Object, Ti
 	@Override
 	public TypeSerializer<TimeWindow> getWindowSerializer(ExecutionConfig executionConfig) {
 		return new TimeWindow.Serializer();
+	}
+
+	@Override
+	public Collection<TimeWindow> assignWindowsOutOfOrder(Object element,
+			long timestamp, long lastStart) {
+		this.maxTimestamp=lastStart;
+		return assignWindows(element, timestamp);
 	}
 }

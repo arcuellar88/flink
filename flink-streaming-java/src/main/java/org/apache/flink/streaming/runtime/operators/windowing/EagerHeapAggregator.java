@@ -76,7 +76,7 @@ public class EagerHeapAggregator<T> implements WindowAggregator<T> {
     private int back, front;
     private final int ROOT = 0;
 
-   // private AggregationStats stats = AggregationStats.getInstance();
+    private AggregationStats stats = AggregationStats.getInstance();
 
     private enum AGG_STATE {UPDATING, AGGREGATING}
 
@@ -102,7 +102,7 @@ public class EagerHeapAggregator<T> implements WindowAggregator<T> {
         this.leafIndex = new LinkedHashMap<Integer, Integer>(capacity);
 
         int fullCapacity = 2 * capacity - 1;
-      //  stats.registerBufferSize(fullCapacity);
+        stats.registerBufferSize(fullCapacity);
         this.circularHeap = new ArrayList<T>(Collections.nCopies(fullCapacity, identityValue));
         //lastRemove="";
     }
@@ -165,7 +165,7 @@ public class EagerHeapAggregator<T> implements WindowAggregator<T> {
 //     	for (Integer integer : leafIndex.keySet()) {
 //     		lastRemove+="Partial: "+integer+" LeafID: "+leafIndex.get(integer)+"\n";
 //		}
-      //  stats.registerBufferSize(fullCapacity);
+        stats.registerBufferSize(fullCapacity);
     }
 
     @Override

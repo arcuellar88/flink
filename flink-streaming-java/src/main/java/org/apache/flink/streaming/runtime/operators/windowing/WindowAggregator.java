@@ -66,5 +66,7 @@ public interface WindowAggregator<T> extends Serializable {
      * @return
      */
     public T aggregate() throws Exception;
+
+	int getNumberOfPartials();
          
 }
