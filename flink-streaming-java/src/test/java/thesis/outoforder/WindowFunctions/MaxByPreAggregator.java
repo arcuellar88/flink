@@ -21,5 +21,10 @@ public class MaxByPreAggregator extends ComparablePreAggregator {
 		super(1,AggregationFunction.AggregationType.MIN,true,config,fIdentityValue);
 	}
 
+	public String toString()
+	{
+		return "MAXBy";
+	}
+
 
 }

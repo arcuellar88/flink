@@ -21,7 +21,7 @@ public class ExperimentDriver {
 
 	private final static String SCENARIOS="SCENARIOS";
 	private List<Scenario> scenarios;
-	private String RESULT_PATH="../setup/results.txt";
+	private String RESULT_PATH="../setup/results"+System.currentTimeMillis()+".txt";
 	
 	
 	public ExperimentDriver(ParameterTool parameter)
@@ -95,7 +95,7 @@ public class ExperimentDriver {
 	JobExecutionResult result= null;
 	StreamExecutionEnvironment env = StreamExecutionEnvironment.createLocalEnvironment(1);
 	env.setStreamTimeCharacteristic(TimeCharacteristic.EventTime);
-	DataStream<Tuple3<String, Double, Long>> dataSource = env.addSource(new DataGenerator(10,s.getNrTuples()));
+	DataStream<Tuple3<String, Double, Long>> dataSource = env.addSource(new DataGenerator(1,s.getNrTuples()));
 	
 	for (String wo : s.getWindowOperator()) 
 	{
@@ -107,19 +107,19 @@ public class ExperimentDriver {
 			.window(s.getWindowAssigner())
 			.reduce(f);
 			result=env.execute("Scenario: "+s.getName());
-			recordExperiment(stats, resultWriter, result, s.getId(),wo,f.toString());
+			recordExperiment(stats, resultWriter, result, s,wo,f.toString());
 		}
 	}
 		
 
 	}
 	
-	public void recordExperiment(AggregationStats stats, PrintWriter resultWriter, JobExecutionResult result, int scenarioId, String wo, String function) {
-		resultWriter.println(scenarioId + "\t"+ result.getNetRuntime() + "\t" + stats.getAggregateCount()
+	public void recordExperiment(AggregationStats stats, PrintWriter resultWriter, JobExecutionResult result, Scenario s, String wo, String function) {
+		resultWriter.println(s.getId() + "\t"+ result.getNetRuntime() + "\t" + stats.getAggregateCount()
 				+ "\t" + stats.getReduceCount() + "\t" + stats.getUpdateCount() + "\t" + stats.getMaxBufferSize() + "\t" + stats.getAverageBufferSize()
 				+ "\t" + stats.getAverageUpdTime() + "\t" + stats.getAverageMergeTime()
 				+ "\t" + (stats.getTotalMergeCount()-1) + "\t" + stats.getPartialCount() + "\t" + stats.getSumOperatorTime()
-				+ "\t" + stats.getSumOperatorCPUTime()+ "\t" + stats.getAvgOperatorTime()+ "\t" + stats.getAvgOperatorCPUTime()+"\t"+wo+"\t"+function);
+				+ "\t" + stats.getSumOperatorCPUTime()+ "\t" + stats.getAvgOperatorTime()+ "\t" + stats.getAvgOperatorCPUTime()+"\t"+wo+"\t"+function+"\t"+s.getNrTuples());
 		stats.reset();
 		resultWriter.flush();
 	}

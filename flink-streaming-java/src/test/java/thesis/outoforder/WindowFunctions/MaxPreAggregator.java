@@ -18,5 +18,10 @@ public class MaxPreAggregator extends ComparablePreAggregator {
 		super(1,AggregationFunction.AggregationType.MAX,true,config,identityValue);
 	}
 
+	public String toString()
+	{
+		return "MAX";
+	}
+
 
 }

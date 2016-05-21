@@ -59,7 +59,7 @@ public class DataGenerator implements SourceFunction<Tuple3<String, Double, Long
 		private void generateOrderedStream(SourceContext<Tuple3<String, Double, Long>> ctx) throws Exception 
 		{
 			isRunning = true;
-			rnd = new Random();
+			rnd = new Random(5719);
 			while (isRunning&&tuples>0) {
 			Tuple3<String, Double, Long>t=nextTuple();
 			
@@ -72,7 +72,7 @@ public class DataGenerator implements SourceFunction<Tuple3<String, Double, Long
 			}
 		}
 			private Tuple3<String, Double, Long> nextTuple() {
-			return new Tuple3<>("Key1",(double) 1.0, this.startTime+=(long)rnd.nextInt(200));
+			return new Tuple3<>("Key1",rnd.nextDouble()*100, this.startTime+=(long)rnd.nextInt(15));
 		}
 
 			@SuppressWarnings("unchecked")

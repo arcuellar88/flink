@@ -1,0 +1,13 @@
+SCEN	TIME	AGG	RED	UPD	MAXB	AVGB	UPD_AVG	MERGE_AVG	WINDOW_CNT	PARTIAL_CNT	TOTAL_OP_TIME	TOTAL_CPU_TIME	AVG_OP_TIME	AVG_CPU_TIME	WO	W_FUNCTION
+1	2704173	0	0	0	0	NaN	0.0	0.0	0	0	0	0	0.0	0.0	V2	thesis.outoforder.WindowFunctions.SumPreAggregator@59aa724f
+1	2764610	0	0	0	0	NaN	0.0	0.0	0	0	0	0	0.0	0.0	V2	thesis.outoforder.WindowFunctions.MinPreAggregator@2cdfaddd
+1	2761948	0	0	0	0	NaN	0.0	0.0	0	0	0	0	0.0	0.0	V2	thesis.outoforder.WindowFunctions.MaxPreAggregator@487aeeb7
+1	2763867	0	0	0	0	NaN	0.0	0.0	0	0	0	0	0.0	0.0	V0	thesis.outoforder.WindowFunctions.SumPreAggregator@59aa724f
+1	2772951	0	0	0	0	NaN	0.0	0.0	0	0	0	0	0.0	0.0	V0	thesis.outoforder.WindowFunctions.MinPreAggregator@2cdfaddd
+1	2771706	0	0	0	0	NaN	0.0	0.0	0	0	0	0	0.0	0.0	V0	thesis.outoforder.WindowFunctions.MaxPreAggregator@487aeeb7
+2	2771475	0	0	0	0	NaN	0.0	0.0	0	0	0	0	0.0	0.0	V2	thesis.outoforder.WindowFunctions.SumPreAggregator@54b2393f
+2	2776959	0	0	0	0	NaN	0.0	0.0	0	0	0	0	0.0	0.0	V2	thesis.outoforder.WindowFunctions.MinPreAggregator@28e73e0a
+2	2808904	0	0	0	0	NaN	0.0	0.0	0	0	0	0	0.0	0.0	V2	thesis.outoforder.WindowFunctions.MaxPreAggregator@7d15a969
+2	2769898	0	0	0	0	NaN	0.0	0.0	0	0	0	0	0.0	0.0	V0	thesis.outoforder.WindowFunctions.SumPreAggregator@54b2393f
+2	2771297	0	0	0	0	NaN	0.0	0.0	0	0	0	0	0.0	0.0	V0	thesis.outoforder.WindowFunctions.MinPreAggregator@28e73e0a
+2	2669797	0	0	0	0	NaN	0.0	0.0	0	0	0	0	0.0	0.0	V0	thesis.outoforder.WindowFunctions.MaxPreAggregator@7d15a969

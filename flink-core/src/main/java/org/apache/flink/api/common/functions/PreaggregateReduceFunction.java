@@ -8,6 +8,7 @@ public abstract class PreaggregateReduceFunction<T> implements ReduceFunction<T>
 	public PreaggregateReduceFunction(T identityValue)
 	{
 		this.identityValue=identityValue;
+		this.windowOperator="default";
 	}
 	
 	
@@ -20,7 +21,7 @@ public abstract class PreaggregateReduceFunction<T> implements ReduceFunction<T>
 	
 	public String getWindowOperator()
 	{
-		return "default";
+		return this.windowOperator;
 	}
 	
 	public void setWindowOperator( String wo)

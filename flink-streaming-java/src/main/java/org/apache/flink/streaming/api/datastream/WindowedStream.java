@@ -381,8 +381,6 @@ public class WindowedStream<T, K, W extends Window> {
 				reduceFunction,
 				
 				input.getType().createSerializer(getExecutionEnvironment().getConfig()));
-
-			//System.out.println(reduceFunction.getIdentityValue());
 			
 			opName = "TriggerWindow(" + windowAssigner + ", " + stateDesc + ", " + trigger + ", " + udfName + ")";
 
@@ -393,25 +391,11 @@ public class WindowedStream<T, K, W extends Window> {
 					stateDesc,
 					new InternalSingleValueWindowFunction<>(function),
 					trigger);
-			
-			
-					// OLD VERSION			
-					//	W w=null;
-					//			Class<W> clazz = null;
-					//			
-					//			System.out.println("Superclass: "+windowAssigner.getClass().getGenericSuperclass());
-					//			Object o= windowAssigner.getClass().getGenericSuperclass();
-					//			if(o instanceof ParameterizedType)
-					//				{
-					//				clazz=(Class<W>)((ParameterizedType) o).getActualTypeArguments()[1];
-					//				System.out.println(" ParameterizedType "+clazz);
-					//				if(clazz.isAssignableFrom(TimeWindow.class))
-					//				{		
-					//			}
-					//		}
-					if(reduceFunction instanceof PreaggregateReduceFunction)
+					
+			if(reduceFunction instanceof PreaggregateReduceFunction)
 					{
 						PreaggregateReduceFunction<T> rf= (PreaggregateReduceFunction<T>)reduceFunction;
+
 						if(rf.getWindowOperator().equals("V2"))
 						{
 							//K, IN, ACC, OUT, W extends TimeWindow

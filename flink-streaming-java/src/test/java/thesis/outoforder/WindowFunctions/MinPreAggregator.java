@@ -16,6 +16,12 @@ public class MinPreAggregator extends ComparablePreAggregator {
 	public MinPreAggregator(ExecutionConfig config,Tuple3<String,Double,Long> identityValue) {
 		super(1,AggregationFunction.AggregationType.MAXBY,true,config,identityValue);
 	}
+	
+	public String toString()
+	{
+		return "MIN";
+	}
+
 
 
 }

@@ -59,6 +59,7 @@ import org.apache.flink.streaming.runtime.operators.Triggerable;
 import org.apache.flink.streaming.runtime.operators.windowing.functions.InternalWindowFunction;
 import org.apache.flink.streaming.runtime.streamrecord.StreamRecord;
 import org.apache.flink.streaming.runtime.tasks.StreamTaskState;
+import org.apache.flink.streaming.runtime.operators.windowing.AggregationStats;
 
 import java.io.IOException;
 import java.io.ObjectInputStream;
@@ -121,8 +122,6 @@ public class PreaggregateWindowOperatorV2<K, IN, ACC, OUT, W extends Window>
 
 	protected final StateDescriptor<? extends AppendingState<IN, ACC>, ?> windowStateDescriptor;
 
-	private AggregationStats stats = AggregationStats.getInstance();
-	
 	/**
 	 * This is used to copy the incoming element because it can be put into several window
 	 * buffers.
@@ -164,12 +163,14 @@ public class PreaggregateWindowOperatorV2<K, IN, ACC, OUT, W extends Window>
 	 * Processing time timers that are currently in-flight.
 	 */
 	protected transient Set<Timer<K, W>> processingTimeTimers;
+	
 	protected transient PriorityQueue<Timer<K, W>> processingTimeTimersQueue;
 
 	/**
 	 * Current waiting watermark callbacks.
 	 */
 	protected transient Set<Timer<K, W>> watermarkTimers;
+	
 	protected transient PriorityQueue<Timer<K, W>> watermarkTimersQueue;
 	
 	protected transient Map<K, MergingWindowSet<W>> mergingWindowsByKey;
@@ -178,10 +179,29 @@ public class PreaggregateWindowOperatorV2<K, IN, ACC, OUT, W extends Window>
 	// ------------------------------------------------------------------------
 	// Out-of-order & Pre-aggregate
 	// ------------------------------------------------------------------------
-	private final IN identityValue;
-	private final HashMap<K, KeyContext<K,TimeWindow,IN>> hmkeyContext;
+	/**
+	 * AggregationStats of the WindowOperator (reduce, aggregate etc.)
+	 */
+	private AggregationStats stats = AggregationStats.getInstance();
+	
+	/**
+	 * Reduce Function of the window
+	 */
 	private final ReduceFunction<IN> reduceF;
-
+	
+	/**
+	 * identityValue of the reduce function f(x,y) | f(identityValue,y)=f(y)
+	 */
+	private final IN identityValue;
+	
+	/**
+	 * hmkeyContext 
+	 */
+	private final HashMap<K, KeyContext<K,TimeWindow,IN>> hmkeyContext;
+	
+	/**
+	 * Lateness horizon: removeUpto(Water-mark+horizon)
+	 */
 	public Long horizon=2000L;
 	
 	/**
@@ -209,11 +229,10 @@ public class PreaggregateWindowOperatorV2<K, IN, ACC, OUT, W extends Window>
 
 		this.windowStateDescriptor = windowStateDescriptor;
 		this.trigger = requireNonNull(trigger);
-
 		
 		setChainingStrategy(ChainingStrategy.ALWAYS);
 		
-		//Out-of-orderPre-aggregate 
+		//Out-of-order Pre-aggregate 
 		this.reduceF=requireNonNull(reduceF);
 		this.identityValue=identityValue;
 		this.hmkeyContext=new LinkedHashMap<K, KeyContext<K,TimeWindow,IN>>();

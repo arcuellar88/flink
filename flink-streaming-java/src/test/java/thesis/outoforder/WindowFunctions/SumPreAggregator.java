@@ -20,5 +20,10 @@ public class SumPreAggregator extends PreaggregateReduceFunction<Tuple3<String,D
 	public Tuple3<String,Double,Long> reduce(Tuple3<String,Double,Long> t1, Tuple3<String,Double,Long> t2) throws Exception {
 		return new Tuple3<String,Double,Long>(t2.f0,t1.f1+t2.f1,t2.f2);
 	}
+	
+	public String toString()
+	{
+		return "SUM";
+	}
 
 }
