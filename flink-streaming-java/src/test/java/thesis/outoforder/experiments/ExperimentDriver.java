@@ -1,5 +1,6 @@
 package thesis.outoforder.experiments;
 
+import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.OutputStreamWriter;
@@ -7,7 +8,9 @@ import java.io.PrintWriter;
 import java.nio.charset.StandardCharsets;
 import java.text.DecimalFormat;
 import java.text.NumberFormat;
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Date;
 import java.util.List;
 
 import org.apache.flink.api.common.JobExecutionResult;
@@ -48,13 +51,19 @@ public class ExperimentDriver {
 		AggregationStats stats = AggregationStats.getInstance();
 	
 		//Writer for the results
+		File f = new File(RESULT_PATH);
+		boolean header=!f.exists();
 		FileOutputStream fos= new FileOutputStream(RESULT_PATH,true);
 		OutputStreamWriter osw= new OutputStreamWriter(fos,StandardCharsets.UTF_8);
 		
+		
 		PrintWriter resultWriter = new PrintWriter(osw, true);
-		resultWriter.println("SCEN\tTIME\tAGG\tRED\tUPD\tMAXB\tAVGB\tUPD_AVG\tUPD_OUT_OF_ORDER_AVG\tMERGE_AVG\tWINDOW_CNT\tPARTIAL_CNT" +
-				"\tTOTAL_OP_TIME\tTOTAL_CPU_TIME\tAVG_OP_TIME\tAVG_CPU_TIME\tWO\tW_FUNCTION\tNR_TUPLES\tAVG_TUPLES_WINDOW\tOUT_OF_ORDER\tDELEY_AVG\tNR_QUERIES");
-	
+		if(header)
+		{
+			resultWriter.println("TS\tSCEN\tTIME\tAGG\tRED\tUPD\tMAXB\tAVGB\tUPD_AVG\tUPD_OUT_OF_ORDER_AVG\tMERGE_AVG\tWINDOW_CNT\tPARTIAL_CNT" +
+					"\tTOTAL_OP_TIME\tTOTAL_CPU_TIME\tAVG_OP_TIME\tAVG_CPU_TIME\tWO\tW_FUNCTION\tNR_TUPLES\tAVG_TUPLES_WINDOW\tOUT_OF_ORDER\tDELEY_AVG\tNR_QUERIES");
+		}
+		
 		//run simple program to warm up (The first start up takes more time...)
 		runWarmUpTask();
 	
@@ -123,7 +132,8 @@ public class ExperimentDriver {
 	}
 	
 	public void recordExperiment(AggregationStats stats, PrintWriter resultWriter, JobExecutionResult result, Scenario s, String wo, String function) {
-		resultWriter.println(s.getId() +" "+s.getName()+"\t"+ result.getNetRuntime() + "\t" + stats.getAggregateCount()
+		
+		resultWriter.println(currentTime()+"\t"+s.getId() +" "+s.getName()+"\t"+ result.getNetRuntime() + "\t" + stats.getAggregateCount()
 				+ "\t" + stats.getReduceCount() + "\t" + stats.getUpdateCount() + "\t" + stats.getMaxBufferSize() + "\t" + stats.getAverageBufferSize()
 				+ "\t" + stats.getAverageUpdTime() + "\t" +stats.getAverageUpdTimeOutOfOrder()+ "\t"+ stats.getAverageMergeTime()
 				+ "\t" + (stats.getTotalMergeCount()-1) + "\t" + stats.getPartialCount() + "\t" + stats.getSumOperatorTime()
@@ -138,6 +148,13 @@ public class ExperimentDriver {
 	}
 	
 	
+	private String currentTime() {
+		long yourmilliseconds = System.currentTimeMillis();
+		SimpleDateFormat sdf = new SimpleDateFormat("MM-dd-yyyy HH:mm:ss");    
+		Date resultdate = new Date(yourmilliseconds);
+		return sdf.format(resultdate);
+	
+	}
 	private String oufOfOrderFormat(long nrTuples, int outOfOrder) {
 		double avg=(double)outOfOrder/(double)nrTuples*100;
 		NumberFormat formatter = new DecimalFormat("#0.00");   
