@@ -25,6 +25,8 @@ public class AggregationStats implements Serializable {
 	private long num_partials = 0l;
 
 	private long upd_timestamp;
+	private long upd_out_of_order_ts;
+	
 	private long merge_timestamp;
 	
 	private long operatorStartTS;
@@ -32,11 +34,25 @@ public class AggregationStats implements Serializable {
 	private int totalOperatorInvokes;
 	private long sumOperatorTime;
 	private long sumOperatorCPUTime;
+	
+	//Out-of-order metrics
+	private int totalOutOfOrder;
+	private int totalOutOfOrderCount;
+	public int getTotalOutOfOrderCount() {
+		return totalOutOfOrderCount;
+	}
 
+	
+	private long sum_upd_out_of_order;
 
 	public enum AGGREGATION_MODE {UPDATES, AGGREGATES};
 
 	public AGGREGATION_MODE state = AGGREGATION_MODE.UPDATES;
+
+	private long sum_delay;
+
+	
+	
 
 	
 	private AggregationStats() {
@@ -69,6 +85,10 @@ public class AggregationStats implements Serializable {
 		update_count++;
 	}
 
+	public void registerOutOfOrderStartUpdate() {
+		this.upd_out_of_order_ts=System.currentTimeMillis();
+	}
+	
 	public void registerStartUpdate() {
 		this.upd_timestamp = System.currentTimeMillis();
 	}
@@ -76,6 +96,17 @@ public class AggregationStats implements Serializable {
 	public void registerEndUpdate() {
 		this.totalUpdateCount++;
 		this.sum_upd_time += System.currentTimeMillis() - upd_timestamp;
+	}
+	
+	public void registerOutOfOrderEndUpdate() {
+		this.totalOutOfOrderCount++;		
+		this.sum_upd_out_of_order+=System.currentTimeMillis()-upd_out_of_order_ts;
+	}
+
+	public void registerOutOfOrder(long delay)
+	{
+		this.sum_delay+=delay;
+		totalOutOfOrder++;
 	}
 
 	public void setAggregationMode(AGGREGATION_MODE mode) {
@@ -172,7 +203,15 @@ public class AggregationStats implements Serializable {
 	}
 
 	public double getAverageUpdTime() {
-			return (double) sum_upd_time / (totalMergeCount>0?totalMergeCount:1);
+			return (double) sum_upd_time / (totalUpdateCount>0?totalUpdateCount:1);
+	}
+	
+	public double getAverageUpdTimeOutOfOrder() {
+		return (double) sum_upd_out_of_order / (totalOutOfOrderCount>0?totalOutOfOrderCount:1);
+	}
+	public double getAverageDelay() {
+		
+		return (double) sum_delay / (totalOutOfOrder>0?totalOutOfOrder:1);
 	}
 	
 	public void reset() {
@@ -187,10 +226,30 @@ public class AggregationStats implements Serializable {
 		totalMergeCount = 1l;
 		sum_merge_time = 0l;
 		upd_timestamp = 0l;
+		upd_out_of_order_ts=0l;
 		merge_timestamp = 0l;
 		num_partials = 0l;
 		totalOperatorInvokes = 0;
 		sumOperatorCPUTime = 0l;
 		sumOperatorTime = 0l;
+
+		
+		//Out-of-order metrics
+		totalOutOfOrder=0;
+		totalOutOfOrderCount=0;
+		sum_upd_out_of_order=0l;
+		this.sum_delay=0l;
 	}
+
+	public int getOutOfOrder() {
+	
+		return totalOutOfOrder;
+	}
+
+	
+
+	
+	
+
+	
 }

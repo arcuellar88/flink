@@ -371,8 +371,9 @@ public class PreaggregateWindowOperatorV1<K, IN, ACC, OUT, W extends Window>
 				// Unordered data
 				if(kc.lastTimestamp>element.getTimestamp())
 				{
-					//TODO
-					
+					W stateWindow = mergingWindows.getStateWindow(actualWindow);
+					AppendingState<IN, ACC> windowState = getPartitionedState(stateWindow, windowSerializer, windowStateDescriptor);
+					windowState.add(element.getValue());
 				}
 				else
 				{
@@ -397,30 +398,35 @@ public class PreaggregateWindowOperatorV1<K, IN, ACC, OUT, W extends Window>
 			// Unordered data
 			if(kc.lastTimestamp>element.getTimestamp())
 			{
-				
+				//Register Out-Of-orde tuple
+				stats.registerOutOfOrder(kc.lastTimestamp-element.getTimestamp());
+
 				for (Window window: elementWindows) {
 					
-					stats.registerStartUpdate();
+					//Store element
+					stats.registerOutOfOrderStartUpdate();
 					AppendingState<IN, ACC> windowState = getPartitionedState((W)window, windowSerializer,windowStateDescriptor);
 					windowState.add(element.getValue());
+					stats.registerOutOfOrderEndUpdate();
 					
+					//Triggers
 					context.key = key;
 					context.window = (W)window;
 					TriggerResult triggerResult = context.onElement(element);
-
 					processTriggerResult(triggerResult,context.window);
 					}
 			}
 			else
 			{
-				//System.out.println(element);
-				// Update partials 
-				kc.updatePartials(elementWindows, element.getValue(),element.getTimestamp());
 				
+				// Update partials 
+				stats.registerStartUpdate();
+				kc.updatePartials(elementWindows, element.getValue(),element.getTimestamp());
+				stats.registerEndUpdate();
+				
+				//Process triggers: 
 				for (TimeWindow window: elementWindows) 
 				{
-					//AppendingState<IN, ACC> windowState = getPartitionedState(window, windowSerializer,windowStateDescriptor);
-					//windowState.add(element.getValue());
 					context.key = key;
 					context.window = (W)window;
 					TriggerResult triggerResult = context.onElement(element);
@@ -862,11 +868,9 @@ protected class KeyContext<K,W extends TimeWindow,T>{
 						hmWindowEnds.put((W)w, currentPartial.partial_id);
 					}
 				
-				stats.registerPartial();
 				LOG.debug("ADDING PARTIAL {} with value {} ", partial_id, currentPartial);
-				stats.registerStartUpdate();
+				stats.registerPartial();
 				this.aggregator.add(currentPartial.partial_id, currentPartial.partial);
-				stats.registerEndUpdate();
 				partial_id++;
 				
 				currentPartial= new Partial<T>(partial_id, pqe.ts, Long.MAX_VALUE,identityValue);
@@ -887,10 +891,8 @@ protected class KeyContext<K,W extends TimeWindow,T>{
 				}
 					
 				}
-			stats.registerStartUpdate();
 			//Add element to the current partial
 			currentPartial.partial=reduceF.reduce(currentPartial.partial, v);
-			stats.registerEndUpdate();
 			currentPartial.end_ts=ts;
 			//Update Last time stamp
 			lastTimestamp=ts;

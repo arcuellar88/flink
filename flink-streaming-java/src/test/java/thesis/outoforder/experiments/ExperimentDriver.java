@@ -1,7 +1,12 @@
 package thesis.outoforder.experiments;
 
+import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.OutputStreamWriter;
 import java.io.PrintWriter;
+import java.nio.charset.StandardCharsets;
+import java.text.DecimalFormat;
+import java.text.NumberFormat;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -21,7 +26,7 @@ public class ExperimentDriver {
 
 	private final static String SCENARIOS="SCENARIOS";
 	private List<Scenario> scenarios;
-	private String RESULT_PATH="../setup/results"+System.currentTimeMillis()+".txt";
+	private String RESULT_PATH="../setup/results.txt";
 	
 	
 	public ExperimentDriver(ParameterTool parameter)
@@ -43,9 +48,12 @@ public class ExperimentDriver {
 		AggregationStats stats = AggregationStats.getInstance();
 	
 		//Writer for the results
-		PrintWriter resultWriter = new PrintWriter(RESULT_PATH, "UTF-8");
-		resultWriter.println("SCEN\tTIME\tAGG\tRED\tUPD\tMAXB\tAVGB\tUPD_AVG\tMERGE_AVG\tWINDOW_CNT\tPARTIAL_CNT" +
-				"\tTOTAL_OP_TIME\tTOTAL_CPU_TIME\tAVG_OP_TIME\tAVG_CPU_TIME\tWO\tW_FUNCTION");
+		FileOutputStream fos= new FileOutputStream(RESULT_PATH,true);
+		OutputStreamWriter osw= new OutputStreamWriter(fos,StandardCharsets.UTF_8);
+		
+		PrintWriter resultWriter = new PrintWriter(osw, true);
+		resultWriter.println("SCEN\tTIME\tAGG\tRED\tUPD\tMAXB\tAVGB\tUPD_AVG\tUPD_OUT_OF_ORDER_AVG\tMERGE_AVG\tWINDOW_CNT\tPARTIAL_CNT" +
+				"\tTOTAL_OP_TIME\tTOTAL_CPU_TIME\tAVG_OP_TIME\tAVG_CPU_TIME\tWO\tW_FUNCTION\tNR_TUPLES\tAVG_TUPLES_WINDOW\tOUT_OF_ORDER\tDELEY_AVG\tNR_QUERIES");
 	
 		//run simple program to warm up (The first start up takes more time...)
 		runWarmUpTask();
@@ -115,16 +123,33 @@ public class ExperimentDriver {
 	}
 	
 	public void recordExperiment(AggregationStats stats, PrintWriter resultWriter, JobExecutionResult result, Scenario s, String wo, String function) {
-		resultWriter.println(s.getId() + "\t"+ result.getNetRuntime() + "\t" + stats.getAggregateCount()
+		resultWriter.println(s.getId() +" "+s.getName()+"\t"+ result.getNetRuntime() + "\t" + stats.getAggregateCount()
 				+ "\t" + stats.getReduceCount() + "\t" + stats.getUpdateCount() + "\t" + stats.getMaxBufferSize() + "\t" + stats.getAverageBufferSize()
-				+ "\t" + stats.getAverageUpdTime() + "\t" + stats.getAverageMergeTime()
+				+ "\t" + stats.getAverageUpdTime() + "\t" +stats.getAverageUpdTimeOutOfOrder()+ "\t"+ stats.getAverageMergeTime()
 				+ "\t" + (stats.getTotalMergeCount()-1) + "\t" + stats.getPartialCount() + "\t" + stats.getSumOperatorTime()
-				+ "\t" + stats.getSumOperatorCPUTime()+ "\t" + stats.getAvgOperatorTime()+ "\t" + stats.getAvgOperatorCPUTime()+"\t"+wo+"\t"+function+"\t"+s.getNrTuples());
+				+ "\t" + stats.getSumOperatorCPUTime()+ "\t" + stats.getAvgOperatorTime()+ "\t" + stats.getAvgOperatorCPUTime()+"\t"
+				+ wo+"\t"+function+"\t"+s.getNrTuples()+"\t"
+				+tuplesPerWindowFormat(s.getNrTuples(),stats.getTotalMergeCount())
+				+"\t"+oufOfOrderFormat(s.getNrTuples(),stats.getOutOfOrder())
+				+"\t"+stats.getAverageDelay()+"\t"+s.getNumberOfQueries());
+	
 		stats.reset();
 		resultWriter.flush();
 	}
 	
 	
+	private String oufOfOrderFormat(long nrTuples, int outOfOrder) {
+		double avg=(double)outOfOrder/(double)nrTuples*100;
+		NumberFormat formatter = new DecimalFormat("#0.00");   
+		String answer=formatter.format(avg)+"%";
+		return answer;
+	}
+	private String tuplesPerWindowFormat(long nrTuples, long totalMergeCount) {
+		double avg=(double)nrTuples/(double)totalMergeCount;
+		NumberFormat formatter = new DecimalFormat("#0.00");     
+		
+		return formatter.format(avg);
+	}
 	public static void main(String[] args) {
 		
 		String propertiesFile = "../setup/experiments.properties";

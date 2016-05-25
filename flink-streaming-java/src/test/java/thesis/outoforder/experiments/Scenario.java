@@ -56,6 +56,8 @@ public class Scenario
 	{
 		windowOperator=parameter.get(SCENARIO+SEP+id+SEP+WINDOW_OPERATOR).split(",");
 		numberOfQueries=parameter.getInt(SCENARIO+SEP+id+SEP+NR_QUERIES);
+		name=parameter.get(SCENARIO+SEP+id);
+		
 		if(numberOfQueries>1)
 			{
 				windowAssigner=new MultiQueryWindowAssigner();

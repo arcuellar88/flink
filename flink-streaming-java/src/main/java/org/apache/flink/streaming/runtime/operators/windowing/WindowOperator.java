@@ -167,6 +167,8 @@ public class WindowOperator<K, IN, ACC, OUT, W extends Window>
 	 */
 	private AggregationStats stats = AggregationStats.getInstance();
 	
+	private long lastTimestamp=Long.MIN_VALUE;
+	
 	/**
 	 * Creates a new {@code WindowOperator} based on the given policies and user functions.
 	 */
@@ -320,21 +322,52 @@ public class WindowOperator<K, IN, ACC, OUT, W extends Window>
 			}
 
 		} else {
-			for (W window: elementWindows) {
+			stats.setAggregationMode(AggregationStats.AGGREGATION_MODE.UPDATES);
+		
+			//Unordered
+			if(lastTimestamp>element.getTimestamp())
+			{
+				stats.registerOutOfOrder(lastTimestamp-element.getTimestamp());
+				for (W window: elementWindows) {
 
-				AppendingState<IN, ACC> windowState = getPartitionedState(window, windowSerializer,
-						windowStateDescriptor);
-			
-				stats.registerStartUpdate();
-				windowState.add(element.getValue());
-				stats.registerEndUpdate();
+					stats.registerOutOfOrderStartUpdate();
+					AppendingState<IN, ACC> windowState = getPartitionedState(window, windowSerializer,
+							windowStateDescriptor);
 				
-				context.key = key;
-				context.window = window;
-				TriggerResult triggerResult = context.onElement(element);
+					windowState.add(element.getValue());
+					stats.registerOutOfOrderEndUpdate();
+					
+					context.key = key;
+					context.window = window;
+					TriggerResult triggerResult = context.onElement(element);
 
-				processTriggerResult(triggerResult, window);
+					processTriggerResult(triggerResult, window);
+				}
 			}
+			else
+			{
+				lastTimestamp=element.getTimestamp();
+				//Inorder
+				for (W window: elementWindows) {
+
+					stats.registerStartUpdate();
+					AppendingState<IN, ACC> windowState = getPartitionedState(window, windowSerializer,
+							windowStateDescriptor);
+				
+					windowState.add(element.getValue());
+					stats.registerEndUpdate();
+					
+					//Triggers:
+					context.key = key;
+					context.window = window;
+					TriggerResult triggerResult = context.onElement(element);
+					processTriggerResult(triggerResult, window);
+				
+			}
+			
+			
+			}
+			
 		}
 		stats.endRecord();
 	}
