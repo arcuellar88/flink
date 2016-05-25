@@ -324,9 +324,10 @@ public class PreaggregateWindowOperatorV2<K, IN, ACC, OUT, W extends Window>
 		}
 		
 
-		Collection<TimeWindow> elementWindows = windowAssignerOutOfOrder.assignWindowsOutOfOrder(element.getValue(), element.getTimestamp(),kc.lastStart);
-
+		
 		if (windowAssigner instanceof MergingWindowAssigner) {
+			Collection<TimeWindow> elementWindows = windowAssignerOutOfOrder.assignWindowsOutOfOrder(element.getValue(), element.getTimestamp(),kc.lastStart);
+
 			MergingWindowSet<W> mergingWindows = getMergingWindowSet();
 
 			for (TimeWindow window: elementWindows) {
@@ -371,13 +372,9 @@ public class PreaggregateWindowOperatorV2<K, IN, ACC, OUT, W extends Window>
 				// Unordered data
 				if(kc.lastTimestamp>element.getTimestamp())
 				{
-					//Search for the partial that should be updated
-					int partial_id=kc.getPartial(element.getTimestamp());
-					
-					if(partial_id>=0)
-					{
-						kc.update(partial_id,element.getValue());
-					}
+					W stateWindow = mergingWindows.getStateWindow(actualWindow);
+					AppendingState<IN, ACC> windowState = getPartitionedState(stateWindow, windowSerializer, windowStateDescriptor);
+					windowState.add(element.getValue());
 				}
 				else
 				{
@@ -402,30 +399,23 @@ public class PreaggregateWindowOperatorV2<K, IN, ACC, OUT, W extends Window>
 			// Unordered data
 			if(kc.lastTimestamp>element.getTimestamp())
 			{
+				int partial=kc.getPartial(element.getTimestamp());
 				
-				//Search for the partial that should be updated
-				int partial_id=kc.getPartial(element.getTimestamp());
-				
-				if(partial_id>=0)
-				{
-					kc.update(partial_id,element.getValue());
-				}
-				
-				
-				for (TimeWindow window: elementWindows) {
-					
-						//AppendingState<IN, ACC> windowState = getPartitionedState(window, windowSerializer,windowStateDescriptor);
-						//windowState.add(element.getValue());
-						context.key = key;
-						context.window = (W)window;
-						TriggerResult triggerResult = context.onElement(element);
-
-						processTriggerResult(triggerResult, (W)window);
-						
-				}
+				kc.update(partial, element.getValue());
+//				for (Window window: elementWindows) {
+//					
+//						AppendingState<IN, ACC> windowState = getPartitionedState((W)window, windowSerializer,windowStateDescriptor);
+//						windowState.add(element.getValue());
+//						context.key = key;
+//						context.window = (W)window;
+//						TriggerResult triggerResult = context.onElement(element);
+//						processTriggerResult(triggerResult, (W)window);
+//				}
 			}
 			else
 			{
+				Collection<TimeWindow> elementWindows = windowAssignerOutOfOrder.assignWindowsOutOfOrder(element.getValue(), element.getTimestamp(),kc.lastStart);
+
 				//System.out.println(element);
 				// Update partials 
 				kc.updatePartials(elementWindows, element.getValue(),element.getTimestamp());
@@ -480,6 +470,7 @@ public class PreaggregateWindowOperatorV2<K, IN, ACC, OUT, W extends Window>
 			return;
 		}
 		
+	
 		KeyContext<K, TimeWindow, IN> kContext=hmkeyContext.get(context.key);
 
 		if (triggerResult.isFire()) {
@@ -489,9 +480,9 @@ public class PreaggregateWindowOperatorV2<K, IN, ACC, OUT, W extends Window>
 			stats.setAggregationMode(AggregationStats.AGGREGATION_MODE.AGGREGATES);
 			IN val=kContext.getWindowContent((TimeWindow) context.window);
 			stats.registerEndMerge();
-			
 			//IN==ACC for the ReduceStateDescriptor
-			ACC contents = (ACC) val;
+			ACC contents = (ACC)val;
+			
 			//System.out.println(context.key+" window: "+context.window+" total: "+contents);
 			userFunction.apply(context.key, context.window, contents, timestampedCollector);
 
@@ -811,7 +802,8 @@ protected class KeyContext<K,W extends TimeWindow,T>{
 
 		
 		public void updatePartials(Collection<W> elementWindows,
-				T v, long ts) throws Exception {			
+				T v, long ts) throws Exception {	
+			
 			for (W window : elementWindows) {
 				TimeWindow w=(TimeWindow)window;
 				

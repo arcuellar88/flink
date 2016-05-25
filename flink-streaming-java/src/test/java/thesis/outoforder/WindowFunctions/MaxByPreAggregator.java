@@ -6,11 +6,13 @@ import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.api.java.tuple.Tuple3;
 import org.apache.flink.streaming.api.functions.aggregation.AggregationFunction;
 import org.apache.flink.streaming.api.functions.aggregation.AggregationFunction.AggregationType;
+import org.apache.flink.streaming.runtime.operators.windowing.AggregationStats;
 
 @SuppressWarnings("serial")
 public class MaxByPreAggregator extends ComparablePreAggregator {
 		
 	private final static Tuple3<String,Double,Long> fIdentityValue= new Tuple3<String,Double,Long>("",Double.MIN_VALUE,0L);
+
 	
 	public MaxByPreAggregator( )
 	{

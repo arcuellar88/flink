@@ -18,27 +18,70 @@ public class DataGenerator implements SourceFunction<Tuple3<String, Double, Long
 		private static final long serialVersionUID = 1L;
 
 		volatile boolean isRunning = false;
-		private Random rnd;
-		private int sleepMillis;
-		private int tuples=0;
-		private long maxDelayMsecs=1000;
-		private long waterMarkMaxDelaySecs=2000;	
-		private long startTime=0L;
 		
-		public DataGenerator(int sleepMillis, int tuples, long maxDelay) 
+		private Random rnd;
+		
+		private int sleepMillis;
+		
+		private long tuples;
+		
+		private long startTime;
+		
+		private long maxDelayMsecs;
+		
+		private double outOfOrderLevel;
+		
+		private long waterMarkMaxDelaySecs=2000;	
+		
+		private boolean watermark;
+		
+		private long maxTupleDistance;
+		
+		
+		public DataGenerator(int sleepMillis, long tuples, long maxDelay, double outOfOrderLevel,boolean watermark,  long maxTupleDistance) 
 		{
 			this.sleepMillis = sleepMillis;
 			this.tuples=tuples;
 			this.maxDelayMsecs=maxDelay;
+			this.watermark=watermark;
+			this.startTime=0L;
+			this.outOfOrderLevel=outOfOrderLevel;
+			this.maxTupleDistance=200;
 		}
 		
-		public DataGenerator(int sleepMillis, int tuples) 
+		public DataGenerator(int sleepMillis, long tuples, long maxDelay, boolean watermark) 
+		{
+			this.sleepMillis = sleepMillis;
+			this.tuples=tuples;
+			this.maxDelayMsecs=maxDelay;
+			this.watermark=watermark;
+			this.startTime=0L;
+			this.outOfOrderLevel=maxDelayMsecs>0?0.3:0;
+			this.maxTupleDistance=200;		}
+		
+		public DataGenerator(int sleepMillis, long tuples, long maxDelay) 
+		{
+			this.sleepMillis = sleepMillis;
+			this.tuples=tuples;
+			this.maxDelayMsecs=maxDelay;
+			this.watermark=true;
+			this.startTime=0L;
+			this.outOfOrderLevel=maxDelayMsecs>0?0.3:0;
+			this.maxTupleDistance=200;
+		}
+		
+		public DataGenerator(int sleepMillis, long tuples) 
 		{
 			this.sleepMillis = sleepMillis;
 			this.tuples=tuples;
 			this.maxDelayMsecs=1000;
 			this.waterMarkMaxDelaySecs=2000;
+			this.watermark=true;
+			this.startTime=0L;
+			this.outOfOrderLevel=maxDelayMsecs>0?0.3:0;
+			this.maxTupleDistance=50;
 		}
+		
 
 			@Override
 			public void run(SourceContext<Tuple3<String, Double, Long>> ctx)
@@ -66,13 +109,18 @@ public class DataGenerator implements SourceFunction<Tuple3<String, Double, Long
 			//System.out.println(t);
 			ctx.collectWithTimestamp(t, t.f2);
 			
-			ctx.emitWatermark(new Watermark(t.f2 - 100));
+			if(watermark)
+				ctx.emitWatermark(new Watermark(t.f2 - 100));
+			
 			tuples--;
 			Thread.sleep(sleepMillis);
 			}
 		}
 			private Tuple3<String, Double, Long> nextTuple() {
-			return new Tuple3<>("Key1",rnd.nextDouble()*100, this.startTime+=(long)rnd.nextInt(15));
+				
+			long distance=(long)(rnd.nextDouble()*maxTupleDistance);
+			
+			return new Tuple3<>("Key1",rnd.nextDouble()*1000, this.startTime+=distance);
 		}
 
 			@SuppressWarnings("unchecked")
@@ -90,8 +138,6 @@ public class DataGenerator implements SourceFunction<Tuple3<String, Double, Long
 				isRunning = true;
 				rnd = new Random();
 				
-				
-						
 				//Add first item to the emitSchedule
 				Tuple3<String, Double, Long>t=nextTuple();
 				Tuple3<String, Double, Long> nextEmitedTuple=t;
@@ -103,18 +149,19 @@ public class DataGenerator implements SourceFunction<Tuple3<String, Double, Long
 				while (isRunning&&tuples>0) 
 				{
 					
-					//long nextScheduledTuple=(emitSchedule.peek()==null)?-1:emitSchedule.peek().f0;
-					//long lastTupleTime=t.f2;
+					long nextScheduledTuple=(emitSchedule.peek()==null)?-1:emitSchedule.peek().f0;
+					long lastTupleTime=t.f2;
 					
 					//Add elements to the emitSchedule
-					while(emitSchedule.isEmpty()||emitSchedule.size()<10)
-							//||lastTupleTime<nextScheduledTuple+maxDelayMsecs)
+					while(emitSchedule.isEmpty()//||lastTupleTime<emitSchedule.size()<30)
+							||lastTupleTime<nextScheduledTuple+maxDelayMsecs)
 					{
-						long emitTime=t.f2+getNormalDelayMsecs();
+						long emitTime=t.f2+getNormalDelayMsecs()*(rnd.nextDouble()<outOfOrderLevel?1:0);
 						emitSchedule.add(new Tuple2<Long, Object>(emitTime,t));
 						//System.out.println(emitTime);
+						//Read next line
 						t=nextTuple();
-						//lastTupleTime=t.f2;
+						lastTupleTime=t.f2;
 					}
 					
 					//Emit first element of the schedule
@@ -155,10 +202,10 @@ public class DataGenerator implements SourceFunction<Tuple3<String, Double, Long
 			 * @param rand
 			 * @return
 			 */
-			public long getNormalDelayMsecs() {
+			private long getNormalDelayMsecs() {
 				long delay = -1;
-				long x = maxDelayMsecs / 2;
-				//TODO check delay>maxDelaysecs
+				long x = maxDelayMsecs/2 ;
+				
 				while(delay < 0 || delay > maxDelayMsecs) {
 					delay = (long)(rnd.nextGaussian() * x) + x;
 				}

@@ -95,7 +95,7 @@ public class ExperimentDriver {
 	JobExecutionResult result= null;
 	StreamExecutionEnvironment env = StreamExecutionEnvironment.createLocalEnvironment(1);
 	env.setStreamTimeCharacteristic(TimeCharacteristic.EventTime);
-	DataStream<Tuple3<String, Double, Long>> dataSource = env.addSource(new DataGenerator(1,s.getNrTuples()));
+	DataStream<Tuple3<String, Double, Long>> dataSource = env.addSource(new DataGenerator(0,s.getNrTuples(),999,0.15,false,50));
 	
 	for (String wo : s.getWindowOperator()) 
 	{

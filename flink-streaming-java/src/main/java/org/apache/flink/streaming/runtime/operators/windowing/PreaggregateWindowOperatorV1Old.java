@@ -99,7 +99,7 @@ import static java.util.Objects.requireNonNull;
  * @param <W> The type of {@code Window} that the {@code WindowAssigner} assigns.
  */
 @Internal
-public class PreaggregateWindowOperator<K, IN, ACC, OUT, W extends Window>
+public class PreaggregateWindowOperatorV1Old<K, IN, ACC, OUT, W extends Window>
 	extends AbstractUdfStreamOperator<OUT, InternalWindowFunction<ACC, OUT, K, W>>
 	implements OneInputStreamOperator<IN, OUT>, Triggerable, InputTypeConfigurable {
 
@@ -180,7 +180,7 @@ public class PreaggregateWindowOperator<K, IN, ACC, OUT, W extends Window>
 	/**
 	 * Creates a new {@code WindowOperator} based on the given policies and user functions.
 	 */
-	public PreaggregateWindowOperator(
+	public PreaggregateWindowOperatorV1Old(
 		WindowAssigner<? super IN, W> windowAssigner,
 		TypeSerializer<W> windowSerializer,
 		KeySelector<IN, K> keySelector,
@@ -193,8 +193,6 @@ public class PreaggregateWindowOperator<K, IN, ACC, OUT, W extends Window>
 			) {
 
 		super(windowFunction);
-		System.out.println("PreaggregateWindowOperator");
-
 		this.windowAssigner = requireNonNull(windowAssigner);
 		this.windowSerializer = windowSerializer;
 		this.keySelector = requireNonNull(keySelector);
@@ -358,16 +356,6 @@ public class PreaggregateWindowOperator<K, IN, ACC, OUT, W extends Window>
 			{
 				for (W window: elementWindows) {
 					
-					//Search for the partial that should be updated
-					int partial_id=kc.getPartial(element.getTimestamp());
-					
-					if(partial_id>=0)
-					{
-						kc.aggregator.update(partial_id,element.getValue());
-					}
-					
-					else
-						{
 						AppendingState<IN, ACC> windowState = getPartitionedState(window, windowSerializer,windowStateDescriptor);
 						windowState.add(element.getValue());
 						
@@ -376,10 +364,8 @@ public class PreaggregateWindowOperator<K, IN, ACC, OUT, W extends Window>
 						TriggerResult triggerResult = context.onElement(element);
 
 						processTriggerResult(triggerResult, window);
-						
 						}
-					
-				}
+				
 			}
 			else
 			{
@@ -411,8 +397,6 @@ public class PreaggregateWindowOperator<K, IN, ACC, OUT, W extends Window>
 					
 					}
 					
-					AppendingState<IN, ACC> windowState = getPartitionedState(window, windowSerializer,windowStateDescriptor);
-					windowState.add(element.getValue());
 					context.key = key;
 					context.window = window;
 					TriggerResult triggerResult = context.onElement(element);
@@ -476,7 +460,7 @@ public class PreaggregateWindowOperator<K, IN, ACC, OUT, W extends Window>
 		if (triggerResult.isFire()) {
 			timestampedCollector.setAbsoluteTimestamp(window.maxTimestamp());
 			ACC contents = windowState.get();
-
+			
 			userFunction.apply(context.key, context.window, contents, timestampedCollector);
 
 		}
@@ -813,7 +797,7 @@ protected class KeyContext<K,W extends Window,T>{
 		@SuppressWarnings("unchecked")
 		public <S extends State> S getPartitionedState(StateDescriptor<S, ?> stateDescriptor) {
 			try {
-				return PreaggregateWindowOperator.this.getPartitionedState(window, windowSerializer, stateDescriptor);
+				return PreaggregateWindowOperatorV1Old.this.getPartitionedState(window, windowSerializer, stateDescriptor);
 			} catch (Exception e) {
 				throw new RuntimeException("Could not retrieve state", e);
 			}
@@ -823,7 +807,7 @@ protected class KeyContext<K,W extends Window,T>{
 		public <S extends MergingState<?, ?>> void mergePartitionedState(StateDescriptor<S, ?> stateDescriptor) {
 			if (mergedWindows != null && mergedWindows.size() > 0) {
 				try {
-					PreaggregateWindowOperator.this.getStateBackend().mergePartitionedStates(window,
+					PreaggregateWindowOperatorV1Old.this.getStateBackend().mergePartitionedStates(window,
 							mergedWindows,
 							windowSerializer,
 							stateDescriptor);
@@ -838,7 +822,7 @@ protected class KeyContext<K,W extends Window,T>{
 			Timer<K, W> timer = new Timer<>(time, key, window);
 			if (processingTimeTimers.add(timer)) {
 				processingTimeTimersQueue.add(timer);
-				getRuntimeContext().registerTimer(time, PreaggregateWindowOperator.this);
+				getRuntimeContext().registerTimer(time, PreaggregateWindowOperatorV1Old.this);
 			}
 		}
 
@@ -852,7 +836,7 @@ protected class KeyContext<K,W extends Window,T>{
 			if (time <= currentWatermark) {
 				// immediately schedule a trigger, so that we don't wait for the next
 				// watermark update to fire the watermark trigger
-				getRuntimeContext().registerTimer(System.currentTimeMillis(), PreaggregateWindowOperator.this);
+				getRuntimeContext().registerTimer(System.currentTimeMillis(), PreaggregateWindowOperatorV1Old.this);
 			}
 		}
 

@@ -42,7 +42,7 @@ public class Scenario
 	private WindowAssigner<Object, TimeWindow> windowAssigner;
 	private int numberOfQueries;
 	private List<PreaggregateReduceFunction<Tuple3<String, Double, Long>>> functions;
-	private int nrTuples;
+	private long nrTuples;
 	
 	
 	
@@ -77,7 +77,7 @@ public class Scenario
 			windowAssigner=loadWindowAssigner(type,1,parameter);
 		}
 		
-		nrTuples=parameter.getInt(SCENARIO+SEP+id+SEP+NR_TUPLES);
+		nrTuples=parameter.getLong(SCENARIO+SEP+id+SEP+NR_TUPLES);
 		loadWindowFunctions(parameter);
 		
 	}
@@ -191,7 +191,7 @@ public class Scenario
 	public List<PreaggregateReduceFunction<Tuple3<String, Double, Long>>> getFunctions() {
 		return functions;
 	}
-	public int getNrTuples() {
+	public long getNrTuples() {
 		return nrTuples;
 	}
 

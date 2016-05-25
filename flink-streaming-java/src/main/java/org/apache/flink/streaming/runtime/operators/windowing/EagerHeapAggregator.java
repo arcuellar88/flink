@@ -279,7 +279,8 @@ public class EagerHeapAggregator<T> implements WindowAggregator<T> {
 	}
 
 	/**
-     * Applies eager bulk pre-aggregation for all given mutated leafIDs. This works exactly as described in the RA paper
+     * Applies eager bulk pre-aggregation for all given mutated leafIDs. 
+     * This works exactly as described in the RA paper
      */
     private void update(Integer... leafIds) throws Exception {
         Set<Integer> next = Sets.newHashSet(leafIds);
@@ -299,7 +300,6 @@ public class EagerHeapAggregator<T> implements WindowAggregator<T> {
 
     /**
      * It invokes a reduce operation on copies of the given values
-     *
      * @param val1
      * @param val2
      * @return
@@ -308,10 +308,10 @@ public class EagerHeapAggregator<T> implements WindowAggregator<T> {
     private T combine(T val1, T val2) throws Exception {
         switch (currentState) {
             case UPDATING:
-        //        stats.registerUpdate();
+                stats.registerUpdate();
                 break;
             case AGGREGATING:
-          //      stats.registerAggregate();
+                stats.registerAggregate();
         }
         //System.out.println("Reduce Function: "+reduceFunction);
         //System.out.println("serializer: "+serializer);
@@ -344,6 +344,7 @@ public class EagerHeapAggregator<T> implements WindowAggregator<T> {
      */
     private T aggregateFromTo(int startLeafID, int endLeafID) throws Exception {
         currentState = AGG_STATE.AGGREGATING;
+        
         if (endLeafID < startLeafID) {
             return combine(prefix(endLeafID), suffix(startLeafID));
         }
@@ -377,22 +378,19 @@ public class EagerHeapAggregator<T> implements WindowAggregator<T> {
             		}
             	
             	if (nextE == right(pE)) {
-                	//if(leafIndex.containsValue(nextE))
-                	//{
                 		aggE = combine(aggE, circularHeap.get(left(pE)));
-                	//}
-//                	else
-//                	{
-//                		aggE = combine(aggE, circularHeap.get(right(pE)));
-//                	}
-                    
                 }
-            	
+//            	if(leafIndex.containsValue(nextE))
+//            	{
+//        		}
+//        	else
+//        	{
+//        		aggE = combine(aggE, circularHeap.get(right(pE)));
+//        	}
+
             }
-            
             nextS = pS;
             nextE = pE;
-
         }
 
         return combine(aggS,aggE);

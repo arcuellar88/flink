@@ -10,10 +10,12 @@ import org.apache.flink.api.java.typeutils.TypeExtractor;
 import org.apache.flink.api.java.typeutils.TypeInfoParser;
 import org.apache.flink.streaming.api.functions.aggregation.AggregationFunction.AggregationType;
 import org.apache.flink.streaming.api.functions.aggregation.ComparableAggregator;
+import org.apache.flink.streaming.runtime.operators.windowing.AggregationStats;
 
 public class ComparablePreAggregator extends PreaggregateReduceFunction<Tuple3<String,Double,Long>> {
 
 	private ComparableAggregator<Tuple3<String,Double,Long>> comparableAggregator;
+	private AggregationStats stats = AggregationStats.getInstance();
 	
 	public ComparablePreAggregator(
 			int positionToAggregate,
@@ -32,7 +34,7 @@ public class ComparablePreAggregator extends PreaggregateReduceFunction<Tuple3<S
 	public Tuple3<String, Double, Long> reduce(
 			Tuple3<String, Double, Long> value1,
 			Tuple3<String, Double, Long> value2) throws Exception {
-		
+		stats.registerReduce();
 		return comparableAggregator.reduce(value1, value2);
 	}
 

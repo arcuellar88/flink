@@ -9,7 +9,6 @@ public class AggregationStats implements Serializable {
 
 	private static AggregationStats ourInstance;
 
-
 	private transient ThreadMXBean mxbean = ManagementFactory.getThreadMXBean();
 
 	private long update_count = 0l;
@@ -34,6 +33,23 @@ public class AggregationStats implements Serializable {
 	private long sumOperatorTime;
 	private long sumOperatorCPUTime;
 
+
+	public enum AGGREGATION_MODE {UPDATES, AGGREGATES};
+
+	public AGGREGATION_MODE state = AGGREGATION_MODE.UPDATES;
+
+	
+	private AggregationStats() {
+	}
+	
+	public static AggregationStats getInstance() {
+		if (ourInstance == null) {
+			return ourInstance = new AggregationStats();
+		} else {
+			return ourInstance;
+		}
+	}
+
 	public void startRecord() {
 		if(mxbean == null){
 			mxbean = ManagementFactory.getThreadMXBean();
@@ -49,23 +65,6 @@ public class AggregationStats implements Serializable {
 		sumOperatorTime += System.currentTimeMillis() - this.operatorStartTS;
 
 	}
-
-
-	public enum AGGREGATION_MODE {UPDATES, AGGREGATES};
-
-	public AGGREGATION_MODE state = AGGREGATION_MODE.UPDATES;
-
-	public static AggregationStats getInstance() {
-		if (ourInstance == null) {
-			return ourInstance = new AggregationStats();
-		} else {
-			return ourInstance;
-		}
-	}
-
-	private AggregationStats() {
-	}
-
 	public void registerUpdate() {
 		update_count++;
 	}
@@ -115,10 +114,7 @@ public class AggregationStats implements Serializable {
 		max_buf_size = max_buf_size < bufSize ? bufSize : max_buf_size;
 	}
 
-	public double getAverageBufferSize() {
-		return ((double) sum_buf_size) / cnt_buf_size;
-	}
-
+	
 	public long getMaxBufferSize() {
 		return max_buf_size;
 	}
@@ -138,7 +134,47 @@ public class AggregationStats implements Serializable {
 	public long getPartialCount() {
 		return num_partials;
 	}
+	
+	public long getSumOperatorCPUTime() {
+		return sumOperatorCPUTime;
+	}
 
+	public long getSumOperatorTime() {
+		return sumOperatorTime;
+	}
+
+	protected Object readResolve() {
+		return getInstance();
+	}
+
+	public long getTotalMergeCount() {
+		return totalMergeCount;
+	}
+
+	public long getTotalUpdateCount() {
+		return totalUpdateCount;
+	}
+
+	public double getAverageBufferSize() {
+		return ((double) sum_buf_size) / (cnt_buf_size>0?cnt_buf_size:1);
+	}
+	
+	public double getAvgOperatorTime(){
+			return sumOperatorTime / (totalOperatorInvokes>1?totalOperatorInvokes:1);
+	}
+
+	public double getAvgOperatorCPUTime(){
+			return sumOperatorCPUTime /(totalOperatorInvokes>1?totalOperatorInvokes:1);
+	}
+
+	public double getAverageMergeTime() {
+			return (double) sum_merge_time / (totalMergeCount>0?totalMergeCount:1);
+	}
+
+	public double getAverageUpdTime() {
+			return (double) sum_upd_time / (totalMergeCount>0?totalMergeCount:1);
+	}
+	
 	public void reset() {
 		update_count = 0l;
 		aggregate_count = 0l;
@@ -156,60 +192,5 @@ public class AggregationStats implements Serializable {
 		totalOperatorInvokes = 0;
 		sumOperatorCPUTime = 0l;
 		sumOperatorTime = 0l;
-	}
-
-	public long getSumOperatorCPUTime() {
-		return sumOperatorCPUTime;
-	}
-
-	public long getSumOperatorTime() {
-		return sumOperatorTime;
-	}
-	
-	public double getAvgOperatorTime(){
-		if(totalOperatorInvokes>0)
-		{
-			return sumOperatorTime / totalOperatorInvokes;
-		}
-		return 0;
-	}
-
-	public double getAvgOperatorCPUTime(){
-		if(totalOperatorInvokes>0)
-		{
-			return sumOperatorCPUTime / totalOperatorInvokes;
-		}
-		
-		return 0;
-		
-	}
-
-	protected Object readResolve() {
-		return getInstance();
-	}
-
-	public long getTotalMergeCount() {
-		return totalMergeCount;
-	}
-
-	public long getTotalUpdateCount() {
-		return totalUpdateCount;
-	}
-
-	public double getAverageMergeTime() {
-		if(totalMergeCount>0)
-		{
-			return (double) sum_merge_time / totalMergeCount;
-		}
-		
-		return 0;
-	}
-
-	public double getAverageUpdTime() {
-		if(totalUpdateCount>0)
-			{
-			return (double) sum_upd_time / totalUpdateCount;
-			}
-		return 0;
 	}
 }
