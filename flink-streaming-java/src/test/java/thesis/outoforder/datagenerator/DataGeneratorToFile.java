@@ -16,7 +16,6 @@ public class DataGeneratorToFile {
          long tuplesOutOfOrder=0L;
          long avgDelay=0L;
          long maxDelay=Long.MIN_VALUE;
-       
          
          public DataStatsMapper()
          {
@@ -34,6 +33,7 @@ public class DataGeneratorToFile {
             	System.out.println("%OutOfOrder: "+(double)((double)tuplesOutOfOrder/(double)tuples));
             	System.out.println("Avg delay: "+(double)((double)avgDelay/(double)tuplesOutOfOrder));
             	System.out.println("Max delay: "+maxDelay);
+            	System.out.println(t);
             	System.out.println();
             }
             tuples++;
@@ -63,12 +63,12 @@ public class DataGeneratorToFile {
 	
 public static void main(String[] args) throws Exception {
 		
-		String outputfile = "../setup/data.txt";
+		String outputfile = "../setup/data2.txt";
 		StreamExecutionEnvironment env = StreamExecutionEnvironment.createLocalEnvironment(1);
 		env.setStreamTimeCharacteristic(TimeCharacteristic.EventTime);
 		
 		long nrTuples=5000000;
-		double outOfOrderLevel=0.15;
+		double outOfOrderLevel=0.5;
 		long maxDelay=999;
 		long maxTupleDistance=50;
 		
