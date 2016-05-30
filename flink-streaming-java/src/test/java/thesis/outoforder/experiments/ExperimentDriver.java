@@ -24,12 +24,13 @@ import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
 import org.apache.flink.streaming.runtime.operators.windowing.AggregationStats;
 
 import thesis.outoforder.datagenerator.DataGenerator;
+import thesis.outoforder.datagenerator.DataGeneratorFromFile;
 
 public class ExperimentDriver {
 
 	private final static String SCENARIOS="SCENARIOS";
 	private List<Scenario> scenarios;
-	private String RESULT_PATH="../setup/results.txt";
+	private String RESULT_PATH="../setup/results2.txt";
 	
 	
 	public ExperimentDriver(ParameterTool parameter)
@@ -112,35 +113,41 @@ public class ExperimentDriver {
 	JobExecutionResult result= null;
 	StreamExecutionEnvironment env = StreamExecutionEnvironment.createLocalEnvironment(1);
 	env.setStreamTimeCharacteristic(TimeCharacteristic.EventTime);
-	DataStream<Tuple3<String, Double, Long>> dataSource = env.addSource(new DataGenerator(0,s.getNrTuples(),999,0.15,false,50));
 	
-	for (String wo : s.getWindowOperator()) 
+	for(long nr_tuples:s.getNrTuples())
 	{
-		for (PreaggregateReduceFunction<Tuple3<String, Double, Long>> f : s.getFunctions()) 
+		//DataStream<Tuple3<String, Double, Long>> dataSource = env.addSource(new DataGenerator(0,nr_tuples,999,0.5,false,50));
+		DataStream<Tuple3<String, Double, Long>> dataSource = env.addSource(new DataGeneratorFromFile(0,nr_tuples,999,2));
+		
+		for (String wo : s.getWindowOperator()) 
 		{
-			f.setWindowOperator(wo);
-			dataSource
-			.keyBy(0)
-			.window(s.getWindowAssigner())
-			.reduce(f);
-			result=env.execute("Scenario: "+s.getName());
-			recordExperiment(stats, resultWriter, result, s,wo,f.toString());
+			for (PreaggregateReduceFunction<Tuple3<String, Double, Long>> f : s.getFunctions()) 
+			{
+				f.setWindowOperator(wo);
+				dataSource
+				.keyBy(0)
+				.window(s.getWindowAssigner())
+				.reduce(f);
+				result=env.execute("Scenario: "+s.getName());
+				recordExperiment(stats, resultWriter, result, s,nr_tuples,wo,f.toString());
+			}
 		}
 	}
+	
 		
 
 	}
 	
-	public void recordExperiment(AggregationStats stats, PrintWriter resultWriter, JobExecutionResult result, Scenario s, String wo, String function) {
+	public void recordExperiment(AggregationStats stats, PrintWriter resultWriter, JobExecutionResult result, Scenario s, long nr_tuples,String wo, String function) {
 		
 		resultWriter.println(currentTime()+"\t"+s.getId() +" "+s.getName()+"\t"+ result.getNetRuntime() + "\t" + stats.getAggregateCount()
 				+ "\t" + stats.getReduceCount() + "\t" + stats.getUpdateCount() + "\t" + stats.getMaxBufferSize() + "\t" + stats.getAverageBufferSize()
 				+ "\t" + stats.getAverageUpdTime() + "\t" +stats.getAverageUpdTimeOutOfOrder()+ "\t"+ stats.getAverageMergeTime()
 				+ "\t" + (stats.getTotalMergeCount()-1) + "\t" + stats.getPartialCount() + "\t" + stats.getSumOperatorTime()
 				+ "\t" + stats.getSumOperatorCPUTime()+ "\t" + stats.getAvgOperatorTime()+ "\t" + stats.getAvgOperatorCPUTime()+"\t"
-				+ wo+"\t"+function+"\t"+s.getNrTuples()+"\t"
-				+tuplesPerWindowFormat(s.getNrTuples(),stats.getTotalMergeCount())
-				+"\t"+oufOfOrderFormat(s.getNrTuples(),stats.getOutOfOrder())
+				+ wo+"\t"+function+"\t"+nr_tuples+"\t"
+				+tuplesPerWindowFormat(nr_tuples,stats.getTotalMergeCount())
+				+"\t"+oufOfOrderFormat(nr_tuples,stats.getOutOfOrder())
 				+"\t"+stats.getAverageDelay()+"\t"+s.getNumberOfQueries());
 	
 		stats.reset();
@@ -157,7 +164,7 @@ public class ExperimentDriver {
 	}
 	private String oufOfOrderFormat(long nrTuples, int outOfOrder) {
 		double avg=(double)outOfOrder/(double)nrTuples*100;
-		NumberFormat formatter = new DecimalFormat("#0.00");   
+		NumberFormat formatter = new DecimalFormat("#0");   
 		String answer=formatter.format(avg)+"%";
 		return answer;
 	}
@@ -169,13 +176,12 @@ public class ExperimentDriver {
 	}
 	public static void main(String[] args) {
 		
-		String propertiesFile = "../setup/experiments.properties";
+		String propertiesFile = "../setup/experiments1.properties";
 		try 
 		{
 			ParameterTool parameter = ParameterTool.fromPropertiesFile(propertiesFile);
 			ExperimentDriver ed=new ExperimentDriver(parameter);
 			ed.execute();
-			
 		} 
 		catch (IOException e) 
 		{

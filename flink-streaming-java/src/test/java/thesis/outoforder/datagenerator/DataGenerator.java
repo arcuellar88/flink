@@ -95,8 +95,6 @@ public class DataGenerator implements SourceFunction<Tuple3<String, Double, Long
 				{
 					generateOrderedStream(ctx);
 				}
-				
-			
 			}
 			
 		private void generateOrderedStream(SourceContext<Tuple3<String, Double, Long>> ctx) throws Exception 

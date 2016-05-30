@@ -22,18 +22,18 @@ import thesis.outoforder.WindowFunctions.SumPreAggregator;
 
 public class Scenario 
 {
-	private final static String WINDOW_OPERATOR="WINDOW_OPERATOR";
-	private final static String Q="QUERY";
-	private final static String TYPE="TYPE";
-	private final static String WINDOW_SIZE="WINDOW_SIZE";
-	private final static String SLIDE="SLIDE";
-	private final static String TUMBLING= "TUMBLING";
-	private final static String WINDOW_FUNCTION="WINDOW_FUNCTION";
-	private final static String SCENARIO="SCENARIO";
-	private final static String NR_QUERIES="NR_QUERIES";
-	private static final String SESSION = "SESSION";
-	private static final String SEP = "_";
-	private static final String NR_TUPLES="NR_TUPLES";
+	public final static String WINDOW_OPERATOR="WINDOW_OPERATOR";
+	public final static String Q="QUERY";
+	public final static String TYPE="TYPE";
+	public final static String WINDOW_SIZE="WINDOW_SIZE";
+	public final static String SLIDE="SLIDE";
+	public final static String TUMBLING= "TUMBLING";
+	public final static String WINDOW_FUNCTION="WINDOW_FUNCTION";
+	public final static String SCENARIO="SCENARIO";
+	public final static String NR_QUERIES="NR_QUERIES";
+	public static final String SESSION = "SESSION";
+	public static final String SEP = "_";
+	public static final String NR_TUPLES="NR_TUPLES";
 	
 	
 	private String name;
@@ -42,7 +42,7 @@ public class Scenario
 	private WindowAssigner<Object, TimeWindow> windowAssigner;
 	private int numberOfQueries;
 	private List<PreaggregateReduceFunction<Tuple3<String, Double, Long>>> functions;
-	private long nrTuples;
+	private long[] nrTuples;
 	
 	
 	
@@ -79,7 +79,13 @@ public class Scenario
 			windowAssigner=loadWindowAssigner(type,1,parameter);
 		}
 		
-		nrTuples=parameter.getLong(SCENARIO+SEP+id+SEP+NR_TUPLES);
+		String tuples[]=parameter.get(SCENARIO+SEP+id+SEP+NR_TUPLES).split(",");
+		
+		nrTuples= new long[tuples.length];
+		
+				for (int i = 0; i < tuples.length; i++) {
+					nrTuples[i]=Long.parseLong(tuples[i]);
+				}
 		loadWindowFunctions(parameter);
 		
 	}
@@ -193,7 +199,7 @@ public class Scenario
 	public List<PreaggregateReduceFunction<Tuple3<String, Double, Long>>> getFunctions() {
 		return functions;
 	}
-	public long getNrTuples() {
+	public long[] getNrTuples() {
 		return nrTuples;
 	}
 
