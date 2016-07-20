@@ -67,6 +67,15 @@ public class EventTimeSessionWindowsOutOfOrder extends MergingWindowAssigner<Obj
 		}
 	}
 
+	public EventTimeSessionWindowsOutOfOrder() {
+		this.sessionTimeouts= new ArrayList<>();
+	}
+	
+	public void addGap(Long t)
+	{
+		sessionTimeouts.add(t);
+	}
+
 	public Tuple2<Collection<TimeWindow>,Collection<TimeWindow>> assignWindowsOutOfOrder(Object element, long timestamp) {
 		
 		Collection<TimeWindow> windows=Collections.singleton(new TimeWindow(timestamp, timestamp + sessionTimeout));
@@ -95,27 +104,7 @@ public class EventTimeSessionWindowsOutOfOrder extends MergingWindowAssigner<Obj
 	@Override
 	public Collection<TimeWindow> assignWindows(Object element, long timestamp) {
 		
-		Collection<TimeWindow> windows=new ArrayList<TimeWindow>();
-		windows.add(new TimeWindow(timestamp, timestamp + sessionTimeout));
-		
-		//In order
-		if(timestamp>maxTimestamp)
-		{
-			long t=timestamp;
-			while(t>maxTimestamp)
-			{
-				t-=sessionTimeout;
-				windows.add(new TimeWindow(t, t + sessionTimeout));
-			}
-			maxTimestamp=t;
-		}
-		//Out-of-order
-		else
-		{
-			//do nothing
-		}
-		
-		return windows;
+		return Collections.singleton(new TimeWindow(timestamp, timestamp + sessionTimeout));
 	}
 
 	@Override
@@ -210,7 +199,10 @@ Collection<TimeWindow> windows=Collections.singleton(new TimeWindow(timestamp, t
 				while(t>maxTimestamp)
 				{
 					t-=st;
-					windowsOoO.add(new TimeWindow(t, t + st));
+					if(t+st<=maxTimestamp||maxTimestamp==0L)
+						{
+						windowsOoO.add(new TimeWindow(t, t + st));
+						}
 				}
 				
 			}
@@ -221,6 +213,7 @@ Collection<TimeWindow> windows=Collections.singleton(new TimeWindow(timestamp, t
 			}
 			 c.add(new Tuple3<>(st,windows,windowsOoO));
 		}
+		
 		maxTimestamp=timestamp;
 		return c;
 		

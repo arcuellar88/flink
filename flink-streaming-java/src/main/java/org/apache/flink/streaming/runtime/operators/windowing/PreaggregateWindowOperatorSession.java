@@ -173,9 +173,9 @@ public class PreaggregateWindowOperatorSession<K, IN, ACC, OUT, W extends Window
 	/**
 	 * Current waiting watermark callbacks.
 	 */
-	protected transient Set<Timer<K, W>> watermarkTimers;
+	protected transient Set<Timer<Long, W>> watermarkTimers;
 	
-	protected transient PriorityQueue<Timer<K, W>> watermarkTimersQueue;
+	protected transient PriorityQueue<Timer<Long, W>> watermarkTimersQueue;
 	
 	//Merging set by Gap
 	protected transient Map<Long, MergingWindowSet<W>> mergingWindowsByKey;
@@ -202,7 +202,7 @@ public class PreaggregateWindowOperatorSession<K, IN, ACC, OUT, W extends Window
 	/**
 	 * hmkeyContext 
 	 */
-	private final HashMap<K, KeyContext<K,TimeWindow,IN>> hmkeyContext;
+	protected final HashMap<K, KeyContext<K,TimeWindow,IN>> hmkeyContext;
 	
 	/**
 	 * Lateness horizon: removeUpto(Water-mark+horizon)
@@ -333,7 +333,7 @@ public class PreaggregateWindowOperatorSession<K, IN, ACC, OUT, W extends Window
 			for (Tuple3<Long, Collection<TimeWindow>, Collection<TimeWindow>> tuple3 : elementWindows) 
 			{
 				MergingWindowSet<W> mergingWindows = getMergingWindowSet(tuple3.f0);
-				
+				context.gap=tuple3.f0;
 				for (TimeWindow window: tuple3.f1) {
 					// If there is a merge, it can only result in a window that contains our new
 					// element because we always eagerly merge
@@ -392,6 +392,9 @@ public class PreaggregateWindowOperatorSession<K, IN, ACC, OUT, W extends Window
 			// Out-of-order data
 			if(kc.lastTimestamp>element.getTimestamp())
 			{
+				stats.registerOutOfOrder(kc.lastTimestamp-element.getTimestamp());
+				stats.registerOutOfOrderStartUpdate();
+			
 				//Search for the partial that should be updated
 				int partial_id=kc.getPartial(element.getTimestamp());
 				
@@ -399,14 +402,16 @@ public class PreaggregateWindowOperatorSession<K, IN, ACC, OUT, W extends Window
 				{
 					kc.update(partial_id,element.getValue());
 				}
+				stats.registerOutOfOrderEndUpdate();
 			}
 			//In-order
 			else
 			{
 				//System.out.println(element);
 				
-				
+				stats.registerStartUpdate();
 				kc.updatePartials(finalWindows, element.getValue(),element.getTimestamp());
+				stats.registerEndUpdate();
 				// Update partials
 				//kc.updatePartials(Collections.singleton((TimeWindow)context.window), element.getValue(),element.getTimestamp());
 			}
@@ -499,11 +504,17 @@ public class PreaggregateWindowOperatorSession<K, IN, ACC, OUT, W extends Window
 			//IN==ACC for the ReduceStateDescriptor
 			ACC contents = (ACC)val;
 			
-			System.out.println(context.key+" window: "+context.window+" total: "+contents);
+			//System.out.println(context.key+" window: "+context.window+" total: "+contents);
 			userFunction.apply(context.key, context.window, contents, timestampedCollector);
 
 		}
 		if (triggerResult.isPurge()) {
+			//System.out.println("GAP: "+context.gap+" Window: "+context.window);
+			MergingWindowSet<W> mergingWindows = getMergingWindowSet(context.gap);
+			if(mergingWindows!=null)
+				{
+				mergingWindows.retireWindow(window);
+				}
 			stats.setAggregationMode(AggregationStats.AGGREGATION_MODE.UPDATES);
 			kContext.removeWindow((TimeWindow) context.window);
 			context.clear();
@@ -522,14 +533,14 @@ public class PreaggregateWindowOperatorSession<K, IN, ACC, OUT, W extends Window
 		boolean fire;
 
 		do {
-			Timer<K, W> timer = watermarkTimersQueue.peek();
+			Timer<Long, W> timer = watermarkTimersQueue.peek();
 			if (timer != null && timer.timestamp <= mark.getTimestamp()) {
 				fire = true;
 
 				watermarkTimers.remove(timer);
 				watermarkTimersQueue.remove();
 
-				context.key = timer.key;
+				context.gap = timer.key;
 				context.window = timer.window;
 				setKeyContext(timer.key);
 				TriggerResult triggerResult = context.onEventTime(timer.timestamp);
@@ -729,6 +740,11 @@ protected class KeyContext<K,W extends TimeWindow,T>{
 			
 		}
 		
+		public void clear(W window) {
+			partialsQueue.remove(window.getEnd());
+			//System.out.println("Clear: "+);
+		}
+
 		public void removeWindow(TimeWindow window) throws Exception {
 		//System.out.println("Remove Window");
 		Integer partial=getPartial(window.getStart()-horizon);
@@ -778,19 +794,19 @@ protected class KeyContext<K,W extends TimeWindow,T>{
 
 		public T getWindowContent(W window) throws Exception 
 		{
-			System.out.println(key+" Aggregate: "+window);
-			System.out.println("K: "+key+" "+window+" Start: "+hmWindowBegins.get(window)+" End: "+hmWindowEnds.get(window));
+			//System.out.println(key+" Aggregate: "+window);
+			//System.out.println("K: "+key+" "+window+" Start: "+hmWindowBegins.get(window)+" End: "+hmWindowEnds.get(window));
 			if(hmWindowBegins.get(window)==null)
 			{
 				int sPartial=getPartial(((TimeWindow)window).getStart());
 				int ePartial=getPartial(((TimeWindow)window).getEnd())-1;
-				System.out.println("sPartial: "+sPartial);
-				System.out.println("ePartial: "+ePartial);
+				//System.out.println("sPartial: "+sPartial);
+				//System.out.println("ePartial: "+ePartial);
 				if(sPartial>0)
 				{
 					if(sPartial<=ePartial)
 					{
-						System.out.println("Aggregate: "+aggregator.aggregate(sPartial, ePartial));
+						//System.out.println("Aggregate: "+aggregator.aggregate(sPartial, ePartial));
 						T val=aggregator.aggregate(sPartial, ePartial);
 						if(window.getEnd()>=currentPartial.start_ts)
 							{
@@ -971,6 +987,7 @@ protected class KeyContext<K,W extends TimeWindow,T>{
 	 * the {@code Context}
 	 */
 	public class Context implements Trigger.OnMergeContext {
+		public Long gap;
 		protected K key;
 		protected W window;
 
@@ -1050,7 +1067,7 @@ protected class KeyContext<K,W extends TimeWindow,T>{
 
 		@Override
 		public void registerEventTimeTimer(long time) {
-			Timer<K, W> timer = new Timer<>(time, key, window);
+			Timer<Long, W> timer = new Timer<>(time, gap, window);
 			if (watermarkTimers.add(timer)) {
 				watermarkTimersQueue.add(timer);
 			}
@@ -1072,7 +1089,7 @@ protected class KeyContext<K,W extends TimeWindow,T>{
 
 		@Override
 		public void deleteEventTimeTimer(long time) {
-			Timer<K, W> timer = new Timer<>(time, key, window);
+			Timer<Long, W> timer = new Timer<>(time, gap, window);
 			if (watermarkTimers.remove(timer)) {
 				watermarkTimersQueue.remove(timer);
 			}
@@ -1098,6 +1115,8 @@ protected class KeyContext<K,W extends TimeWindow,T>{
 
 		public void clear() throws Exception {
 			trigger.clear(window, this);
+			hmkeyContext.get(key).clear((TimeWindow) window);
+			
 		}
 
 		@Override
@@ -1188,8 +1207,8 @@ protected class KeyContext<K,W extends TimeWindow,T>{
 			getStateBackend().createCheckpointStateOutputView(checkpointId, timestamp);
 
 		out.writeInt(watermarkTimersQueue.size());
-		for (Timer<K, W> timer : watermarkTimersQueue) {
-			keySerializer.serialize(timer.key, out);
+		for (Timer<Long, W> timer : watermarkTimersQueue) {
+			//keySerializer.serialize(timer.key, out);
 			windowSerializer.serialize(timer.window, out);
 			out.writeLong(timer.timestamp);
 		}
@@ -1223,10 +1242,11 @@ protected class KeyContext<K,W extends TimeWindow,T>{
 			K key = keySerializer.deserialize(in);
 			W window = windowSerializer.deserialize(in);
 			long timestamp = in.readLong();
-			Timer<K, W> timer = new Timer<>(timestamp, key, window);
+			Timer<Long, W> timer = new Timer<>(timestamp, context.gap, window);
 			watermarkTimers.add(timer);
 			watermarkTimersQueue.add(timer);
 		}
+		
 
 		int numProcessingTimeTimers = in.readInt();
 		processingTimeTimers = new HashSet<>(numProcessingTimeTimers);

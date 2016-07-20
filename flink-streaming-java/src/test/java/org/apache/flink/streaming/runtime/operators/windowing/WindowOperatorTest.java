@@ -37,6 +37,7 @@ import org.apache.flink.streaming.api.functions.windowing.RichWindowFunction;
 import org.apache.flink.streaming.api.functions.windowing.WindowFunction;
 import org.apache.flink.streaming.api.watermark.Watermark;
 import org.apache.flink.streaming.api.windowing.assigners.EventTimeSessionWindows;
+import org.apache.flink.streaming.api.windowing.assigners.EventTimeSessionWindowsOutOfOrder;
 import org.apache.flink.streaming.api.windowing.assigners.GlobalWindows;
 import org.apache.flink.streaming.api.windowing.assigners.MultiQueryWindowAssigner;
 import org.apache.flink.streaming.api.windowing.assigners.SlidingEventTimeWindows;
@@ -252,7 +253,259 @@ public class WindowOperatorTest {
 
 		testHarness.close();
 	}
+	
+	@Test
+	@SuppressWarnings("unchecked")
+	public void testPreaggregateSessionEventTimeWindowsApply() throws Exception {
+		closeCalled.set(0);
 
+		final int WINDOW_GAP = 2;
+	
+		TypeInformation<Tuple2<String, Integer>> inputType = TypeInfoParser.parse("Tuple2<String, Integer>");
+
+		ReducingStateDescriptor<Tuple2<String, Integer>> stateDesc = new ReducingStateDescriptor<>("window-contents",
+				new SumReducer(),
+				inputType.createSerializer(new ExecutionConfig()));
+
+		//K, IN, ACC, OUT, W
+		PreaggregateWindowOperatorSession<String, Tuple2<String, Integer>, Tuple2<String, Integer>, Tuple2<String, Integer>, TimeWindow> operator = 
+				new PreaggregateWindowOperatorSession<>
+				(
+				EventTimeSessionWindowsOutOfOrder.withGap(Time.of(WINDOW_GAP, TimeUnit.SECONDS)),
+				new TimeWindow.Serializer(),
+				new TupleKeySelector(),
+				BasicTypeInfo.STRING_TYPE_INFO.createSerializer(new ExecutionConfig()),
+				stateDesc,
+				new InternalSingleValueWindowFunction<>(new PassThroughWindowFunction<String, TimeWindow, Tuple2<String, Integer>>()),
+				EventTimeTrigger.create(),
+				new SumReducer(),
+				new Tuple2<String, Integer>("IdentityValue",0)
+				);
+
+		operator.setInputType(inputType, new ExecutionConfig());
+
+		OneInputStreamOperatorTestHarness<Tuple2<String, Integer>, Tuple2<String, Integer>> testHarness =
+				new OneInputStreamOperatorTestHarness<>(operator);
+
+		testHarness.configureForKeyedStream(new TupleKeySelector(), BasicTypeInfo.STRING_TYPE_INFO);
+
+		testHarness.open();
+		
+		long initialTime = 0L;
+		//Expected result
+		ConcurrentLinkedQueue<Object> expectedOutput = new ConcurrentLinkedQueue<>();
+
+		testHarness.processElement(new StreamRecord<>(new Tuple2<>("key2", 1), initialTime + 6100));
+		testHarness.processElement(new StreamRecord<>(new Tuple2<>("key2", 1), initialTime + 6202));
+		testHarness.processElement(new StreamRecord<>(new Tuple2<>("key2", 1), initialTime + 6204));
+		testHarness.processElement(new StreamRecord<>(new Tuple2<>("key2", 1), initialTime + 6206));
+		testHarness.processWatermark(new Watermark(initialTime + 999));
+		
+		expectedOutput.add(new Watermark(initialTime + 999));
+		
+		testHarness.processElement(new StreamRecord<>(new Tuple2<>("key2", 1), initialTime + 3600));
+		testHarness.processElement(new StreamRecord<>(new Tuple2<>("key2", 1), initialTime + 120));
+		testHarness.processElement(new StreamRecord<>(new Tuple2<>("key2", 1), initialTime + 500));
+		testHarness.processElement(new StreamRecord<>(new Tuple2<>("key2", 1), initialTime + 850));
+		testHarness.processElement(new StreamRecord<>(new Tuple2<>("key2", 1), initialTime + 1550));
+		testHarness.processElement(new StreamRecord<>(new Tuple2<>("key2", 1), initialTime + 4500));
+
+		
+		//testHarness.processElement(new StreamRecord<>(new Tuple2<>("key2", 1), initialTime + 8206));
+		
+		testHarness.processWatermark(new Watermark(initialTime + 7207));
+		testHarness.processWatermark(new Watermark(initialTime + 9207));
+//		testHarness.processElement(new StreamRecord<>(new Tuple2<>("key2", 1), initialTime + 1902));
+//		testHarness.processElement(new StreamRecord<>(new Tuple2<>("key2", 1), initialTime + 1200));
+//		
+//		testHarness.processElement(new StreamRecord<>(new Tuple2<>("key1", 1), initialTime + 1250));
+//		testHarness.processElement(new StreamRecord<>(new Tuple2<>("key1", 1), initialTime + 1200));
+//		
+//		testHarness.processElement(new StreamRecord<>(new Tuple2<>("key2", 1), initialTime + 1202));
+//		testHarness.processElement(new StreamRecord<>(new Tuple2<>("key2", 1), initialTime + 1201));
+//		testHarness.processElement(new StreamRecord<>(new Tuple2<>("key2", 1), initialTime + 8901));
+//		testHarness.processElement(new StreamRecord<>(new Tuple2<>("key2", 1), initialTime + 8902));
+//		testHarness.processElement(new StreamRecord<>(new Tuple2<>("key2", 1), initialTime + 8903));
+//		
+//		testHarness.processElement(new StreamRecord<>(new Tuple2<>("key1", 1), initialTime + 8901));
+//		testHarness.processElement(new StreamRecord<>(new Tuple2<>("key1", 1), initialTime + 8902));
+//		
+//		
+//		testHarness.processWatermark(new Watermark(initialTime + 4000));
+//		expectedOutput.add(new StreamRecord<>(new Tuple2<>("key2", 5), initialTime + 1999));
+//		expectedOutput.add(new StreamRecord<>(new Tuple2<>("key1", 2), initialTime + 1999));
+//		
+//		expectedOutput.add(new StreamRecord<>(new Tuple2<>("key1", 2), initialTime + 2999));
+//		expectedOutput.add(new StreamRecord<>(new Tuple2<>("key2", 5), initialTime + 2999));
+//		
+//		expectedOutput.add(new StreamRecord<>(new Tuple2<>("key1", 2), initialTime + 3999));
+//		expectedOutput.add(new StreamRecord<>(new Tuple2<>("key2", 5), initialTime + 3999));
+//
+//		expectedOutput.add(new Watermark(initialTime + 4000));
+//		
+//		testHarness.processWatermark(new Watermark(initialTime + 5000));
+//		expectedOutput.add(new StreamRecord<>(new Tuple2<>("IdentityValue", 0), initialTime + 4999));
+//		expectedOutput.add(new StreamRecord<>(new Tuple2<>("IdentityValue", 0), initialTime + 4999));
+//		expectedOutput.add(new Watermark(initialTime + 5000));
+//		
+//		testHarness.processElement(new StreamRecord<>(new Tuple2<>("key1", 1), initialTime + 6901));
+//		testHarness.processElement(new StreamRecord<>(new Tuple2<>("key1", 1), initialTime + 6902));
+//		
+//		testHarness.processWatermark(new Watermark(initialTime + 12000));
+//		
+//		expectedOutput.add(new StreamRecord<>(new Tuple2<>("IdentityValue", 0), initialTime + 5999));
+//		expectedOutput.add(new StreamRecord<>(new Tuple2<>("IdentityValue", 0), initialTime + 5999));
+//
+//		expectedOutput.add(new StreamRecord<>(new Tuple2<>("key1", 2), initialTime + 6999));
+//		expectedOutput.add(new StreamRecord<>(new Tuple2<>("IdentityValue", 0), initialTime + 6999));
+//
+//		expectedOutput.add(new StreamRecord<>(new Tuple2<>("IdentityValue", 0), initialTime + 7999));
+//		expectedOutput.add(new StreamRecord<>(new Tuple2<>("key1", 2), initialTime + 7999));
+//
+//		expectedOutput.add(new StreamRecord<>(new Tuple2<>("key2", 3), initialTime + 8999));
+//		expectedOutput.add(new StreamRecord<>(new Tuple2<>("key1", 4), initialTime + 8999));
+//
+//		expectedOutput.add(new StreamRecord<>(new Tuple2<>("key1", 2), initialTime + 9999));
+//		expectedOutput.add(new StreamRecord<>(new Tuple2<>("key2", 3), initialTime + 9999));
+//
+//		expectedOutput.add(new StreamRecord<>(new Tuple2<>("key1", 2), initialTime + 10999));
+//		expectedOutput.add(new StreamRecord<>(new Tuple2<>("key2", 3), initialTime + 10999));
+		expectedOutput.add(new Watermark(initialTime + 12000));
+
+
+		System.out.println(testHarness.getOutput());
+		//TestHarnessUtil.assertOutputEqualsSorted("Output was not correct.", expectedOutput, testHarness.getOutput(), new Tuple2ResultSortComparator());
+
+		testHarness.close();
+	}
+
+	@Test
+	@SuppressWarnings("unchecked")
+	public void testPreaggregateMultiSessionEventTimeWindowsApply() throws Exception {
+		closeCalled.set(0);
+
+		final int WINDOW_GAP = 2;
+		final int WINDOW_GAP_2 = 4;
+
+		TypeInformation<Tuple2<String, Integer>> inputType = TypeInfoParser.parse("Tuple2<String, Integer>");
+
+		ReducingStateDescriptor<Tuple2<String, Integer>> stateDesc = new ReducingStateDescriptor<>("window-contents",
+				new SumReducer(),
+				inputType.createSerializer(new ExecutionConfig()));
+
+		//K, IN, ACC, OUT, W
+		PreaggregateWindowOperatorSession<String, Tuple2<String, Integer>, Tuple2<String, Integer>, Tuple2<String, Integer>, TimeWindow> operator = 
+				new PreaggregateWindowOperatorSession<>
+				(
+				EventTimeSessionWindowsOutOfOrder.withGaps(Time.of(WINDOW_GAP, TimeUnit.SECONDS),Time.of(WINDOW_GAP_2, TimeUnit.SECONDS)),
+				new TimeWindow.Serializer(),
+				new TupleKeySelector(),
+				BasicTypeInfo.STRING_TYPE_INFO.createSerializer(new ExecutionConfig()),
+				stateDesc,
+				new InternalSingleValueWindowFunction<>(new PassThroughWindowFunction<String, TimeWindow, Tuple2<String, Integer>>()),
+				EventTimeTrigger.create(),
+				new SumReducer(),
+				new Tuple2<String, Integer>("IdentityValue",0)
+				);
+
+		operator.setInputType(inputType, new ExecutionConfig());
+
+		OneInputStreamOperatorTestHarness<Tuple2<String, Integer>, Tuple2<String, Integer>> testHarness =
+				new OneInputStreamOperatorTestHarness<>(operator);
+
+		testHarness.configureForKeyedStream(new TupleKeySelector(), BasicTypeInfo.STRING_TYPE_INFO);
+
+		testHarness.open();
+		
+		long initialTime = 0L;
+		//Expected result
+		ConcurrentLinkedQueue<Object> expectedOutput = new ConcurrentLinkedQueue<>();
+
+		testHarness.processElement(new StreamRecord<>(new Tuple2<>("key2", 1), initialTime + 6100));
+		testHarness.processElement(new StreamRecord<>(new Tuple2<>("key2", 1), initialTime + 6202));
+		testHarness.processElement(new StreamRecord<>(new Tuple2<>("key2", 1), initialTime + 6204));
+		testHarness.processElement(new StreamRecord<>(new Tuple2<>("key2", 1), initialTime + 6206));
+		testHarness.processWatermark(new Watermark(initialTime + 999));
+		
+		expectedOutput.add(new Watermark(initialTime + 999));
+		
+		testHarness.processElement(new StreamRecord<>(new Tuple2<>("key2", 1), initialTime + 5600));
+		testHarness.processElement(new StreamRecord<>(new Tuple2<>("key2", 1), initialTime + 120));
+		testHarness.processElement(new StreamRecord<>(new Tuple2<>("key2", 1), initialTime + 500));
+		testHarness.processElement(new StreamRecord<>(new Tuple2<>("key2", 1), initialTime + 850));
+		testHarness.processElement(new StreamRecord<>(new Tuple2<>("key2", 1), initialTime + 1550));
+		testHarness.processElement(new StreamRecord<>(new Tuple2<>("key2", 1), initialTime + 6500));
+		testHarness.processElement(new StreamRecord<>(new Tuple2<>("key2", 1), initialTime + 6450));
+
+		
+		//testHarness.processElement(new StreamRecord<>(new Tuple2<>("key2", 1), initialTime + 8206));
+		
+		testHarness.processWatermark(new Watermark(initialTime + 7207));
+		testHarness.processWatermark(new Watermark(initialTime + 16000));
+//		testHarness.processElement(new StreamRecord<>(new Tuple2<>("key2", 1), initialTime + 1902));
+//		testHarness.processElement(new StreamRecord<>(new Tuple2<>("key2", 1), initialTime + 1200));
+//		
+//		testHarness.processElement(new StreamRecord<>(new Tuple2<>("key1", 1), initialTime + 1250));
+//		testHarness.processElement(new StreamRecord<>(new Tuple2<>("key1", 1), initialTime + 1200));
+//		
+//		testHarness.processElement(new StreamRecord<>(new Tuple2<>("key2", 1), initialTime + 1202));
+//		testHarness.processElement(new StreamRecord<>(new Tuple2<>("key2", 1), initialTime + 1201));
+//		testHarness.processElement(new StreamRecord<>(new Tuple2<>("key2", 1), initialTime + 8901));
+//		testHarness.processElement(new StreamRecord<>(new Tuple2<>("key2", 1), initialTime + 8902));
+//		testHarness.processElement(new StreamRecord<>(new Tuple2<>("key2", 1), initialTime + 8903));
+//		
+//		testHarness.processElement(new StreamRecord<>(new Tuple2<>("key1", 1), initialTime + 8901));
+//		testHarness.processElement(new StreamRecord<>(new Tuple2<>("key1", 1), initialTime + 8902));
+//		
+//		
+//		testHarness.processWatermark(new Watermark(initialTime + 4000));
+//		expectedOutput.add(new StreamRecord<>(new Tuple2<>("key2", 5), initialTime + 1999));
+//		expectedOutput.add(new StreamRecord<>(new Tuple2<>("key1", 2), initialTime + 1999));
+//		
+//		expectedOutput.add(new StreamRecord<>(new Tuple2<>("key1", 2), initialTime + 2999));
+//		expectedOutput.add(new StreamRecord<>(new Tuple2<>("key2", 5), initialTime + 2999));
+//		
+//		expectedOutput.add(new StreamRecord<>(new Tuple2<>("key1", 2), initialTime + 3999));
+//		expectedOutput.add(new StreamRecord<>(new Tuple2<>("key2", 5), initialTime + 3999));
+//
+//		expectedOutput.add(new Watermark(initialTime + 4000));
+//		
+//		testHarness.processWatermark(new Watermark(initialTime + 5000));
+//		expectedOutput.add(new StreamRecord<>(new Tuple2<>("IdentityValue", 0), initialTime + 4999));
+//		expectedOutput.add(new StreamRecord<>(new Tuple2<>("IdentityValue", 0), initialTime + 4999));
+//		expectedOutput.add(new Watermark(initialTime + 5000));
+//		
+//		testHarness.processElement(new StreamRecord<>(new Tuple2<>("key1", 1), initialTime + 6901));
+//		testHarness.processElement(new StreamRecord<>(new Tuple2<>("key1", 1), initialTime + 6902));
+//		
+//		testHarness.processWatermark(new Watermark(initialTime + 12000));
+//		
+//		expectedOutput.add(new StreamRecord<>(new Tuple2<>("IdentityValue", 0), initialTime + 5999));
+//		expectedOutput.add(new StreamRecord<>(new Tuple2<>("IdentityValue", 0), initialTime + 5999));
+//
+//		expectedOutput.add(new StreamRecord<>(new Tuple2<>("key1", 2), initialTime + 6999));
+//		expectedOutput.add(new StreamRecord<>(new Tuple2<>("IdentityValue", 0), initialTime + 6999));
+//
+//		expectedOutput.add(new StreamRecord<>(new Tuple2<>("IdentityValue", 0), initialTime + 7999));
+//		expectedOutput.add(new StreamRecord<>(new Tuple2<>("key1", 2), initialTime + 7999));
+//
+//		expectedOutput.add(new StreamRecord<>(new Tuple2<>("key2", 3), initialTime + 8999));
+//		expectedOutput.add(new StreamRecord<>(new Tuple2<>("key1", 4), initialTime + 8999));
+//
+//		expectedOutput.add(new StreamRecord<>(new Tuple2<>("key1", 2), initialTime + 9999));
+//		expectedOutput.add(new StreamRecord<>(new Tuple2<>("key2", 3), initialTime + 9999));
+//
+//		expectedOutput.add(new StreamRecord<>(new Tuple2<>("key1", 2), initialTime + 10999));
+//		expectedOutput.add(new StreamRecord<>(new Tuple2<>("key2", 3), initialTime + 10999));
+		expectedOutput.add(new Watermark(initialTime + 12000));
+
+
+		System.out.println(testHarness.getOutput());
+		//TestHarnessUtil.assertOutputEqualsSorted("Output was not correct.", expectedOutput, testHarness.getOutput(), new Tuple2ResultSortComparator());
+
+		testHarness.close();
+	}
+	
 	@Test
 	@SuppressWarnings("unchecked")
 	public void testPreaggregateSlidingEventTimeWindowsApply() throws Exception {
